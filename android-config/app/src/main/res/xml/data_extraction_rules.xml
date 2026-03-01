@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Règles de sauvegarde Android (Android 12+) -->
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Exclure les données sensibles de la sauvegarde Google -->
+        <exclude domain="sharedpref" path="user_session.xml" />
+        <exclude domain="database" path="socialfeed.db" />
+        <exclude domain="file" path="keystore/" />
+    </cloud-backup>
+    <device-transfer>
+        <!-- Autoriser le transfert des préférences non-sensibles -->
+        <include domain="sharedpref" path="app_preferences.xml" />
+        <exclude domain="sharedpref" path="user_session.xml" />
+    </device-transfer>
+</data-extraction-rules>

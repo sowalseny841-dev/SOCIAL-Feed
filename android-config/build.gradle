@@ -1,0 +1,48 @@
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  SOCIALFEED – build.gradle (Projet racine)                              ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+buildscript {
+    ext {
+        // ── Versions centralisées ─────────────────────────────────────────
+        kotlin_version        = '1.9.22'
+        hilt_version          = '2.50'
+        nav_version           = '2.7.6'
+        room_version          = '2.6.1'
+    }
+}
+
+plugins {
+    // Android Application (utilisé dans app/build.gradle)
+    id 'com.android.application'         version '8.2.2'  apply false
+
+    // Android Library (pour les modules)
+    id 'com.android.library'             version '8.2.2'  apply false
+
+    // Kotlin Android
+    id 'org.jetbrains.kotlin.android'    version '1.9.22' apply false
+
+    // ── Firebase & Google Services ──────────────────────────────────────────
+    // OBLIGATOIRE : transforme google-services.json en ressources Android
+    id 'com.google.gms.google-services'  version '4.4.0'  apply false
+
+    // Firebase Crashlytics
+    id 'com.google.firebase.crashlytics' version '2.9.9'  apply false
+
+    // Firebase Performance Monitoring
+    id 'com.google.firebase.firebase-perf' version '1.4.2' apply false
+
+    // ── Kotlin Symbol Processing ────────────────────────────────────────────
+    id 'com.google.devtools.ksp'          version '1.9.22-1.0.17' apply false
+
+    // ── Hilt (Injection de dépendances) ────────────────────────────────────
+    id 'dagger.hilt.android.plugin'       version '2.50'  apply false
+
+    // ── Navigation Safe Args ────────────────────────────────────────────────
+    id 'androidx.navigation.safeargs.kotlin' version '2.7.6' apply false
+}
+
+// Tâche de nettoyage globale
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
+}

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ╔════════════════════════════════════════════════════════════════╗
+  ║  google-services.json TEMPLATE                                 ║
+  ║  ⚠️  À remplacer par votre vrai fichier de la Firebase Console ║
+  ╚════════════════════════════════════════════════════════════════╝
+
+  COMMENT OBTENIR CE FICHIER :
+  1. Allez sur https://console.firebase.google.com
+  2. Créez un projet (ex : "SocialFeed")
+  3. Cliquez sur l'icône Android (</>)
+  4. Entrez le package : com.socialfeed.app
+  5. Téléchargez google-services.json
+  6. Placez-le dans : app/google-services.json
+
+  CHAMPS À REMPLACER ci-dessous :
+  - YOUR_PROJECT_NUMBER    → Numéro du projet Firebase
+  - YOUR_PROJECT_ID        → ID du projet (ex: socialfeed-abc12)
+  - YOUR_STORAGE_BUCKET    → Bucket de stockage
+  - YOUR_FIREBASE_API_KEY  → Clé API (visible dans les paramètres)
+  - YOUR_APP_ID            → ID de l'application Android
+  - YOUR_CLIENT_ID         → Client ID OAuth (Google Sign-In)
+  - YOUR_CLIENT_TOKEN      → Client token
+-->
+
+{
+  "project_info": {
+    "project_number": "YOUR_PROJECT_NUMBER",
+    "project_id": "YOUR_PROJECT_ID",
+    "storage_bucket": "YOUR_PROJECT_ID.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:YOUR_PROJECT_NUMBER:android:YOUR_APP_ID",
+        "android_client_info": {
+          "package_name": "com.socialfeed.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "YOUR_FIREBASE_API_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

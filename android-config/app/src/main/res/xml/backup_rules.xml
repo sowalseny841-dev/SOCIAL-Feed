@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Règles de sauvegarde Android (< API 31) -->
+<full-backup-content>
+    <!-- Exclure les tokens de session et données sensibles -->
+    <exclude domain="sharedpref" path="user_session.xml" />
+    <exclude domain="database" path="socialfeed.db" />
+    <exclude domain="file" path="keystore/" />
+    <exclude domain="external" path="." />
+</full-backup-content>

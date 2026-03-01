@@ -1,0 +1,41 @@
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  SOCIALFEED – settings.gradle                                           ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+pluginManagement {
+    repositories {
+        // Dépôts officiels Android / Kotlin
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+
+        // JitPack – pour les bibliothèques tierces (PhotoView, ImagePicker…)
+        maven { url 'https://jitpack.io' }
+    }
+}
+
+rootProject.name = "SocialFeed"
+
+// Module principal de l'application
+include ':app'
+
+// ── Modules supplémentaires (optionnels – décommenter si nécessaire) ────────
+// include ':feature:feed'
+// include ':feature:profile'
+// include ':feature:auth'
+// include ':core:network'
+// include ':core:database'

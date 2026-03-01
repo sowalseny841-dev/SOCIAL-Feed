@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chemins de fichiers accessibles via FileProvider -->
+<!-- Utilisé pour partager les photos capturées par la caméra -->
+<paths>
+    <!-- Photos prises par la caméra (stockage interne) -->
+    <external-files-path
+        name="camera_photos"
+        path="Pictures/" />
+
+    <!-- Fichiers temporaires (cache) -->
+    <cache-path
+        name="cached_files"
+        path="." />
+
+    <!-- Fichiers internes de l'app -->
+    <files-path
+        name="internal_files"
+        path="." />
+
+    <!-- Stockage externe (si nécessaire) -->
+    <external-path
+        name="external_files"
+        path="." />
+</paths>

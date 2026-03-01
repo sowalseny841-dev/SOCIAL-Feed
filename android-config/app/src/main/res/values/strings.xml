@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ressources de chaînes de caractères -->
+<resources>
+    <!-- Nom de l'application (affiché sur le Play Store) -->
+    <string name="app_name">SocialFeed</string>
+    <string name="app_description">Le réseau social pour partager vos moments</string>
+
+    <!-- Authentification -->
+    <string name="login_title">Connexion</string>
+    <string name="register_title">Inscription</string>
+    <string name="email_hint">Adresse email</string>
+    <string name="password_hint">Mot de passe</string>
+    <string name="username_hint">Nom d\'utilisateur</string>
+    <string name="display_name_hint">Prénom et Nom</string>
+    <string name="btn_login">Se connecter</string>
+    <string name="btn_register">Créer un compte</string>
+    <string name="btn_google_sign_in">Continuer avec Google</string>
+    <string name="forgot_password">Mot de passe oublié ?</string>
+    <string name="no_account">Pas encore de compte ?</string>
+    <string name="already_account">Déjà un compte ?</string>
+
+    <!-- Feed -->
+    <string name="feed_title">Fil d\'actualité</string>
+    <string name="create_post_hint">Quoi de neuf ?</string>
+    <string name="btn_post">Publier</string>
+    <string name="btn_like">J\'aime</string>
+    <string name="btn_comment">Commenter</string>
+    <string name="btn_share">Partager</string>
+    <string name="image_url_hint">URL d\'une image (optionnel)</string>
+
+    <!-- Profil -->
+    <string name="profile_title">Profil</string>
+    <string name="edit_profile">Modifier le profil</string>
+    <string name="change_photo">Changer la photo</string>
+    <string name="bio_hint">Parlez de vous…</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Accueil</string>
+    <string name="nav_friends">Amis</string>
+    <string name="nav_notifications">Notifications</string>
+    <string name="nav_profile">Profil</string>
+    <string name="nav_search">Recherche</string>
+
+    <!-- Notifications -->
+    <string name="default_notification_channel_id">socialfeed_notifications</string>
+    <string name="notification_channel_name">Notifications SocialFeed</string>
+    <string name="notif_like">a aimé votre publication</string>
+    <string name="notif_comment">a commenté votre publication</string>
+    <string name="notif_friend">vous a envoyé une demande d\'ami</string>
+
+    <!-- Messages d'erreur -->
+    <string name="error_network">Connexion internet requise</string>
+    <string name="error_invalid_email">Email invalide</string>
+    <string name="error_weak_password">Mot de passe trop court (6 caractères minimum)</string>
+    <string name="error_user_not_found">Utilisateur introuvable</string>
+    <string name="error_wrong_password">Mot de passe incorrect</string>
+    <string name="error_email_taken">Cet email est déjà utilisé</string>
+    <string name="error_generic">Une erreur est survenue</string>
+
+    <!-- Permissions -->
+    <string name="permission_camera_rationale">L\'accès à la caméra est nécessaire pour prendre une photo de profil</string>
+    <string name="permission_storage_rationale">L\'accès à la galerie est nécessaire pour choisir une photo</string>
+
+    <!-- Play Store – Politique de confidentialité -->
+    <string name="privacy_policy_url">https://socialfeed.pages.dev/privacy</string>
+    <string name="terms_of_service_url">https://socialfeed.pages.dev/terms</string>
+</resources>

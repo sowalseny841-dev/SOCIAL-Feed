@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           SOCIALFEED – AndroidManifest.xml                                  ║
+║           Application ID : com.socialfeed.app                               ║
+║           Cible : Android 7.0 (API 24) → Android 14 (API 34)               ║
+║           Prêt pour Google Play Store                                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+-->
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.socialfeed.app">
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         PERMISSIONS
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- Réseau (obligatoire pour Firebase, API REST) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Photos & Médias -->
+    <!-- Android 13+ : READ_MEDIA_IMAGES remplace READ_EXTERNAL_STORAGE -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        android:minSdkVersion="33" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:ignore="ScopedStorage" />
+
+    <!-- Caméra (optionnel – photo de profil) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Notifications Push (Firebase Cloud Messaging) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
+
+    <!-- Vibration pour les notifications -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Empêcher la mise en veille du réseau pendant l'upload -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         FONCTIONNALITÉS MATÉRIELLES (optionnelles – ne bloque pas l'install)
+         ═══════════════════════════════════════════════════════════════════ -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.front"
+        android:required="false" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         APPLICATION
+         ═══════════════════════════════════════════════════════════════════ -->
+    <application
+        android:name=".SocialFeedApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SocialFeed"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="false"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        tools:targetApi="31">
+
+        <!-- ── Activité principale (Écran de démarrage) ──────────────────── -->
+        <activity
+            android:name=".ui.SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SocialFeed.Splash"
+            android:screenOrientation="portrait"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── Connexion / Inscription ───────────────────────────────────── -->
+        <activity
+            android:name=".ui.auth.LoginActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.SocialFeed.Auth" />
+
+        <activity
+            android:name=".ui.auth.RegisterActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.SocialFeed.Auth" />
+
+        <!-- ── Activité principale (Feed) ───────────────────────────────── -->
+        <activity
+            android:name=".ui.main.MainActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan"
+            android:theme="@style/Theme.SocialFeed"
+            android:launchMode="singleTop">
+
+            <!-- Deep Link : socialfeed://feed -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="socialfeed"
+                    android:host="feed" />
+            </intent-filter>
+
+            <!-- App Link HTTPS (remplacer par votre domaine) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="socialfeed.pages.dev"
+                    android:pathPrefix="/feed" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── Profil Utilisateur ────────────────────────────────────────── -->
+        <activity
+            android:name=".ui.profile.ProfileActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.SocialFeed" />
+
+        <!-- ── Création de Publication ───────────────────────────────────── -->
+        <activity
+            android:name=".ui.post.CreatePostActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.SocialFeed" />
+
+        <!-- ── Notifications ─────────────────────────────────────────────── -->
+        <activity
+            android:name=".ui.notifications.NotificationsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.SocialFeed" />
+
+        <!-- ── Paramètres ────────────────────────────────────────────────── -->
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.SocialFeed" />
+
+        <!-- ── Amis / Recherche ──────────────────────────────────────────── -->
+        <activity
+            android:name=".ui.friends.FriendsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.SocialFeed" />
+
+        <!-- ════════════════════════════════════════════════════════════════
+             FIREBASE CLOUD MESSAGING (FCM) – Notifications Push
+             ════════════════════════════════════════════════════════════════ -->
+        <service
+            android:name=".services.SocialFeedMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Icône et couleur par défaut pour les notifications FCM -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="@string/default_notification_channel_id" />
+
+        <!-- ════════════════════════════════════════════════════════════════
+             PROVIDER – Partage de fichiers (image upload / photo caméra)
+             ════════════════════════════════════════════════════════════════ -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- ════════════════════════════════════════════════════════════════
+             GOOGLE PLAY – Clé API Maps (si utilisation de Maps)
+             ════════════════════════════════════════════════════════════════ -->
+        <!-- Décommentez si vous utilisez Google Maps
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_maps_key" />
+        -->
+
+        <!-- ════════════════════════════════════════════════════════════════
+             GLIDE – Chargement d'images performant
+             ════════════════════════════════════════════════════════════════ -->
+        <meta-data
+            android:name="com.bumptech.glide.integration.okhttp3.OkHttpGlideModule"
+            android:value="GlideModule" />
+
+        <!-- ════════════════════════════════════════════════════════════════
+             WORK MANAGER – Upload en arrière-plan
+             ════════════════════════════════════════════════════════════════ -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
+    </application>
+
+</manifest>
