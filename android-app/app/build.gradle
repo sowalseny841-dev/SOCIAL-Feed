@@ -1,9 +1,11 @@
-apply plugin: 'com.android.application'
-apply plugin: 'org.jetbrains.kotlin.android'
-apply plugin: 'com.google.gms.google-services'
-apply plugin: 'com.google.firebase.crashlytics'
-apply plugin: 'com.google.devtools.ksp'
-apply plugin: 'dagger.hilt.android'
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
+    id 'com.google.firebase.crashlytics'
+    id 'com.google.devtools.ksp'
+    id 'com.google.dagger.hilt.android'
+}
 
 android {
     namespace 'com.socialfeed.app'
