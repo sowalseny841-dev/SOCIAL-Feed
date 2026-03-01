@@ -45,3 +45,12 @@ android-config/.gradle/
 android-config/app/build/
 android-config/build/
 android-config/local.properties
+
+# APK locaux (générés par CI, ne pas committer)
+*.apk
+*.aab
+
+# Build Android local
+android-app/app/build/
+android-app/.gradle/
+android-app/local.properties
