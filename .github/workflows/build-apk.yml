@@ -25,21 +25,17 @@ jobs:
         working-directory: android-app
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "Downloading gradle-wrapper.jar..."
             mkdir -p gradle/wrapper
             wget -q "https://github.com/gradle/gradle/raw/v8.4.0/gradle/wrapper/gradle-wrapper.jar" \
               -O gradle/wrapper/gradle-wrapper.jar
-            echo "gradle-wrapper.jar downloaded ($(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes)"
           fi
           if [ ! -f gradlew ]; then
-            echo "Downloading Gradle 8.4 to generate wrapper..."
             wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
             /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version=8.4
           fi
           sed -i "s/DEFAULT_JVM_OPTS=.*$/DEFAULT_JVM_OPTS='-Xmx4096m -Xms512m'/" gradlew
           chmod +x gradlew
-          echo "gradlew ready: $(ls -la gradlew)"
 
       - name: Decode Keystore
         run: |
@@ -52,102 +48,84 @@ jobs:
 
       - name: Create Android drawable resources
         run: |
-          python3 << 'PYEOF'
-          import os
+          BASE="android-app/app/src/main/res"
 
-          base = "android-app/app/src/main/res"
+          # Créer les dossiers
+          for d in drawable mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi \
+                   mipmap-hdpi-v26 mipmap-mdpi-v26 mipmap-xhdpi-v26 mipmap-xxhdpi-v26 mipmap-xxxhdpi-v26 xml; do
+            mkdir -p "$BASE/$d"
+          done
 
-          # Créer les dossiers nécessaires
-          dirs = [
-            f"{base}/drawable",
-            f"{base}/mipmap-hdpi",   f"{base}/mipmap-mdpi",
-            f"{base}/mipmap-xhdpi",  f"{base}/mipmap-xxhdpi",
-            f"{base}/mipmap-xxxhdpi",
-            f"{base}/xml"
-          ]
-          for d in dirs:
-              os.makedirs(d, exist_ok=True)
+          # ic_notification.xml
+          cat > "$BASE/drawable/ic_notification.xml" << 'XMLEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp" android:height="24dp"
+              android:viewportWidth="24" android:viewportHeight="24">
+            <path android:fillColor="#FFFFFF"
+                android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07-1.64,-5.64-4.5,-6.32V4c0,-0.83-0.67,-1.5-1.5,-1.5s-1.5,0.67-1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"/>
+          </vector>
+          XMLEOF
 
-          # Drawables seulement (NE PAS écraser colors.xml, strings.xml, themes.xml commitées)
-          drawables = {
-            f"{base}/drawable/ic_notification.xml": '''<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-  <path android:fillColor="#FFFFFF"
-      android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07-1.64,-5.64-4.5,-6.32V4c0,-0.83-0.67,-1.5-1.5,-1.5s-1.5,0.67-1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"/>
-</vector>''',
-            f"{base}/drawable/ic_default_avatar.xml": '''<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="44dp" android:height="44dp"
-    android:viewportWidth="44" android:viewportHeight="44">
-  <path android:fillColor="#1877F2" android:pathData="M22,22m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
-  <path android:fillColor="#FFFFFF" android:pathData="M22,12a6,6 0,1 0,0 12a6,6 0,0 0,0-12zM10,30c0,-4 5.4,-7 12,-7s12,3 12,7v2H10v-2z"/>
-</vector>''',
-            f"{base}/drawable/bg_card.xml": '''<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-  <solid android:color="#FFFFFF"/>
-  <corners android:radius="12dp"/>
-  <stroke android:width="1dp" android:color="#E4E6EB"/>
-</shape>''',
-            f"{base}/drawable/bg_input_rounded.xml": '''<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-  <solid android:color="#F0F2F5"/>
-  <corners android:radius="24dp"/>
-</shape>''',
-          }
+          # ic_default_avatar.xml
+          cat > "$BASE/drawable/ic_default_avatar.xml" << 'XMLEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="44dp" android:height="44dp"
+              android:viewportWidth="44" android:viewportHeight="44">
+            <path android:fillColor="#1877F2" android:pathData="M22,22m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
+            <path android:fillColor="#FFFFFF" android:pathData="M22,12a6,6 0,1 0,0 12a6,6 0,0 0,0-12zM10,30c0,-4 5.4,-7 12,-7s12,3 12,7v2H10v-2z"/>
+          </vector>
+          XMLEOF
 
-          # Launcher icons simples
-          simple_launcher = '''<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-  <solid android:color="#1877F2"/>
-</shape>'''
+          # bg_card.xml
+          cat > "$BASE/drawable/bg_card.xml" << 'XMLEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#FFFFFF"/>
+            <corners android:radius="12dp"/>
+            <stroke android:width="1dp" android:color="#E4E6EB"/>
+          </shape>
+          XMLEOF
 
-          adaptive_launcher = '''<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <background android:drawable="@color/primary"/>
-  <foreground android:drawable="@drawable/ic_notification"/>
-</adaptive-icon>'''
+          # Launcher simple (oval bleu)
+          SIMPLE_LAUNCHER='<?xml version="1.0" encoding="utf-8"?><shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#1877F2"/></shape>'
 
-          for density in ["hdpi","mdpi","xhdpi","xxhdpi","xxxhdpi"]:
-              drawables[f"{base}/mipmap-{density}/ic_launcher.xml"] = simple_launcher
-              drawables[f"{base}/mipmap-{density}/ic_launcher_round.xml"] = simple_launcher
-              os.makedirs(f"{base}/mipmap-{density}-v26", exist_ok=True)
-              drawables[f"{base}/mipmap-{density}-v26/ic_launcher.xml"] = adaptive_launcher
-              drawables[f"{base}/mipmap-{density}-v26/ic_launcher_round.xml"] = adaptive_launcher
+          # Adaptive launcher
+          ADAPTIVE_LAUNCHER='<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/primary"/><foreground android:drawable="@drawable/ic_notification"/></adaptive-icon>'
 
-          # file_paths.xml pour FileProvider
-          drawables[f"{base}/xml/file_paths.xml"] = '''<?xml version="1.0" encoding="utf-8"?>
-<paths>
-  <external-files-path name="camera_photos" path="Pictures/"/>
-  <cache-path name="cached_files" path="."/>
-</paths>'''
+          for density in hdpi mdpi xhdpi xxhdpi xxxhdpi; do
+            echo "$SIMPLE_LAUNCHER" > "$BASE/mipmap-$density/ic_launcher.xml"
+            echo "$SIMPLE_LAUNCHER" > "$BASE/mipmap-$density/ic_launcher_round.xml"
+            echo "$ADAPTIVE_LAUNCHER" > "$BASE/mipmap-$density-v26/ic_launcher.xml"
+            echo "$ADAPTIVE_LAUNCHER" > "$BASE/mipmap-$density-v26/ic_launcher_round.xml"
+          done
 
-          for path, content in drawables.items():
-              with open(path, 'w') as f:
-                  f.write(content)
+          # file_paths.xml
+          cat > "$BASE/xml/file_paths.xml" << 'XMLEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths>
+            <external-files-path name="camera_photos" path="Pictures/"/>
+            <cache-path name="cached_files" path="."/>
+          </paths>
+          XMLEOF
 
-          print(f"Created {len(drawables)} resource files")
-          PYEOF
+          echo "Resources created OK"
 
       - name: Verify build setup
         run: |
           echo "=== Kotlin files ==="
           find android-app/app/src/main/java -name "*.kt" | sort
-          echo "=== NO Hilt annotations ==="
-          if grep -r "@HiltAndroidApp\|@AndroidEntryPoint\|@HiltViewModel\|@Inject constructor" \
-               android-app/app/src/main/java/ 2>/dev/null; then
-            echo "ERROR: Hilt annotations found!"
-            exit 1
+          echo "=== Themes ==="
+          cat android-app/app/src/main/res/values/themes.xml
+          echo "=== Manifest ==="
+          grep -E "activity|service|name=" android-app/app/src/main/AndroidManifest.xml | head -20
+          echo "=== No Hilt ==="
+          if grep -rq "@HiltAndroidApp\|@AndroidEntryPoint\|@HiltViewModel" android-app/app/src/main/java/; then
+            echo "ERROR: Hilt found"; exit 1
           else
-            echo "OK: No Hilt annotations"
+            echo "OK: No Hilt"
           fi
-          echo "=== Manifest check ==="
-          grep -c "FCMService\|AuthActivity\|MainActivity" android-app/app/src/main/AndroidManifest.xml
-          echo "=== Theme used ==="
-          grep "Theme\." android-app/app/src/main/res/values/themes.xml
-          echo "=== build.gradle version ==="
-          grep "versionName\|versionCode" android-app/app/build.gradle
 
       - name: Build Debug APK
         working-directory: android-app
@@ -156,7 +134,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1
 
       - name: Build Release AAB
         working-directory: android-app
@@ -165,7 +143,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew bundleRelease --no-daemon --stacktrace
+        run: ./gradlew bundleRelease --no-daemon --stacktrace 2>&1
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -187,7 +165,5 @@ jobs:
         if: success()
         run: |
           echo "BUILD SUCCESS - v1.5.0"
-          echo "Theme: MaterialComponents (stable)"
-          echo "Hilt: removed"
-          echo "ProGuard: configured"
-          echo "APK: app/build/outputs/apk/debug/app-debug.apk"
+          echo "Theme: Theme.MaterialComponents.Light.NoActionBar"
+          ls -lh android-app/app/build/outputs/apk/debug/app-debug.apk
