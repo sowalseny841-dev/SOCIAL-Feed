@@ -201,7 +201,7 @@ jobs:
       - name: Build Debug APK
         working-directory: android-app
         env:
-          KEYSTORE_PATH: keystore/socialfeed-release.jks
+          KEYSTORE_PATH: /home/runner/work/SOCIAL-Feed/SOCIAL-Feed/android-app/keystore/socialfeed-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -210,7 +210,7 @@ jobs:
       - name: Build Release AAB
         working-directory: android-app
         env:
-          KEYSTORE_PATH: keystore/socialfeed-release.jks
+          KEYSTORE_PATH: /home/runner/work/SOCIAL-Feed/SOCIAL-Feed/android-app/keystore/socialfeed-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
