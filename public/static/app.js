@@ -437,3 +437,367 @@ document.addEventListener('DOMContentLoaded', () => {
   // Rafraîchir le compteur de notifs toutes les 30s
   setInterval(loadNotifCount, 30000);
 });
+
+// ═══════════════════════════════════════════════════
+// MESSAGERIE
+// ═══════════════════════════════════════════════════
+
+let currentConvId = null;
+let lastMsgTime = new Date().toISOString();
+let pollInterval = null;
+
+async function sendMessage(e, convId, targetUsername) {
+  e.preventDefault();
+  const input = document.getElementById('msg-input');
+  const content = input.value.trim();
+  if (!content) return;
+  input.value = '';
+
+  try {
+    const res = await fetch(`/api/messages/${convId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+    const msg = await res.json();
+    appendMessage(msg, true);
+    lastMsgTime = msg.created_at;
+    scrollToBottom();
+  } catch (err) {
+    console.error('Erreur envoi message:', err);
+  }
+}
+
+function appendMessage(msg, isMine) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = `msg-row ${isMine ? 'msg-mine' : 'msg-theirs'}`;
+  div.innerHTML = `
+    <div class="msg-bubble-wrap">
+      <div class="msg-bubble">${escapeHtmlJs(msg.content)}</div>
+      <span class="msg-time">maintenant</span>
+    </div>`;
+  container.appendChild(div);
+}
+
+function escapeHtmlJs(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br/>');
+}
+
+function scrollToBottom() {
+  const cm = document.getElementById('chat-messages');
+  if (cm) cm.scrollTop = cm.scrollHeight;
+}
+
+// Polling pour nouveaux messages
+function startMessagePolling(convId, myId) {
+  clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/messages/${convId}/poll?since=${encodeURIComponent(lastMsgTime)}`);
+      const data = await res.json();
+      if (data.messages && data.messages.length > 0) {
+        data.messages.forEach(msg => {
+          if (msg.sender_id != myId) {
+            appendMessage(msg, false);
+            lastMsgTime = msg.created_at;
+          }
+        });
+        scrollToBottom();
+      }
+    } catch {}
+  }, 3000);
+}
+
+// Init polling si on est dans une conv
+document.addEventListener('DOMContentLoaded', () => {
+  const chatWin = document.getElementById('chat-window');
+  if (chatWin) {
+    const convIdEl = document.querySelector('[data-conv-id]');
+    if (convIdEl) {
+      const convId = convIdEl.dataset.convId;
+      const myId = convIdEl.dataset.myId;
+      startMessagePolling(convId, myId);
+    }
+    scrollToBottom();
+
+    // Sur mobile : marquer comme ouvert
+    document.querySelector('.messages-layout')?.classList.add('chat-open');
+  }
+});
+
+// Filtre conversations
+function filterConvs(query) {
+  const items = document.querySelectorAll('.conv-item');
+  items.forEach(item => {
+    const name = item.querySelector('.conv-name')?.textContent?.toLowerCase() || '';
+    item.style.display = name.includes(query.toLowerCase()) ? '' : 'none';
+  });
+}
+
+// Emoji picker
+function toggleEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  if (picker) picker.classList.toggle('hidden');
+}
+
+function insertEmoji(emoji) {
+  const input = document.getElementById('msg-input');
+  if (input) {
+    const pos = input.selectionStart;
+    input.value = input.value.slice(0, pos) + emoji + input.value.slice(pos);
+    input.focus();
+    input.setSelectionRange(pos + emoji.length, pos + emoji.length);
+  }
+  document.getElementById('emoji-picker')?.classList.add('hidden');
+}
+
+// Nouvelle conv : recherche utilisateur
+async function searchUsers(query, resultsDivId) {
+  if (query.length < 2) {
+    document.getElementById(resultsDivId).innerHTML = '';
+    return;
+  }
+  const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  const div = document.getElementById(resultsDivId);
+  if (!div) return;
+  div.innerHTML = data.users.map(u => `
+    <a href="/messages/${u.username}" class="search-result-item">
+      <div class="avatar-sm avatar-placeholder">${u.display_name[0].toUpperCase()}</div>
+      <div>
+        <div class="font-bold">${u.display_name}</div>
+        <div class="text-secondary">@${u.username}</div>
+      </div>
+    </a>`).join('') || '<p class="empty-result">Aucun utilisateur trouvé</p>';
+}
+
+function openNewConvModal() {
+  document.getElementById('new-conv-modal')?.classList.remove('hidden');
+  document.getElementById('user-search-msg')?.focus();
+}
+
+function closeNewConvModal() {
+  document.getElementById('new-conv-modal')?.classList.add('hidden');
+}
+
+// ═══════════════════════════════════════════════════
+// APPELS AUDIO / VIDÉO
+// ═══════════════════════════════════════════════════
+
+function startCall(username, type, userId) {
+  window.location.href = `/call/${username}?type=${type}`;
+}
+
+function sendVoiceNote() {
+  alert('🎤 Note vocale : fonctionnalité disponible avec l\'abonnement Premium.');
+}
+
+// ═══════════════════════════════════════════════════
+// MONÉTISATION : PREMIUM & PAIEMENT
+// ═══════════════════════════════════════════════════
+
+let selectedPlanId = null;
+let selectedPlanName = '';
+let selectedPlanPrice = 0;
+let selectedProvider = '';
+
+function subscribePlan(planId, planName, planPrice) {
+  selectedPlanId = planId;
+  selectedPlanName = planName;
+  selectedPlanPrice = planPrice;
+
+  const summary = document.getElementById('payment-summary');
+  if (summary) {
+    summary.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <strong>${planName}</strong><br/>
+          <span style="color:var(--text-secondary);font-size:13px;">Abonnement mensuel</span>
+        </div>
+        <div style="font-size:22px;font-weight:800;color:var(--blue);">${planPrice.toLocaleString()} XOF</div>
+      </div>`;
+  }
+  document.getElementById('payment-modal')?.classList.remove('hidden');
+}
+
+function closePaymentModal() {
+  document.getElementById('payment-modal')?.classList.add('hidden');
+  selectedProvider = '';
+  document.querySelectorAll('.payment-method-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('payment-form-area')?.classList.add('hidden');
+}
+
+function selectPayment(provider) {
+  selectedProvider = provider;
+  document.querySelectorAll('.payment-method-btn').forEach(b => b.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  const form = document.getElementById('payment-form-area');
+  if (form) {
+    form.classList.remove('hidden');
+    const placeholders = {
+      orange_money: 'Numéro Orange Money (ex: 77 XXX XX XX)',
+      wave: 'Numéro Wave (ex: 70 XXX XX XX)',
+      mtn: 'Numéro MTN Mobile Money',
+      free_money: 'Numéro Free Money'
+    };
+    const input = document.getElementById('payment-phone');
+    if (input) input.placeholder = placeholders[provider] || 'Numéro de téléphone';
+  }
+}
+
+async function confirmPayment() {
+  const phone = document.getElementById('payment-phone')?.value?.trim();
+  if (!phone) { alert('Veuillez saisir votre numéro de téléphone.'); return; }
+  if (!selectedProvider) { alert('Veuillez choisir une méthode de paiement.'); return; }
+
+  const btn = event.currentTarget;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement en cours…';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: selectedPlanId, phone, provider: selectedProvider })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closePaymentModal();
+      showToast(`✅ ${data.message}`, 'success');
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      showToast('❌ ' + (data.error || 'Erreur de paiement'), 'error');
+    }
+  } catch {
+    showToast('❌ Erreur réseau. Réessayez.', 'error');
+  } finally {
+    btn.innerHTML = '<i class="fas fa-lock"></i> Confirmer et payer';
+    btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// MARKETPLACE
+// ═══════════════════════════════════════════════════
+
+function openSellModal() {
+  document.getElementById('sell-modal')?.classList.remove('hidden');
+}
+
+function closeSellModal() {
+  document.getElementById('sell-modal')?.classList.add('hidden');
+}
+
+async function createListing(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = {
+    title: form.title.value.trim(),
+    description: form.description.value.trim(),
+    price_xof: parseInt(form.price.value),
+    category: form.category.value,
+    condition: form.condition.value,
+    location: form.location?.value?.trim() || '',
+    image_url: form.image_url?.value?.trim() || ''
+  };
+
+  const btn = form.querySelector('button[type=submit]');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publication…';
+  btn.disabled = true;
+
+  const res = await fetch('/api/marketplace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  const result = await res.json();
+  if (result.success) {
+    showToast('✅ Article mis en vente !', 'success');
+    closeSellModal();
+    setTimeout(() => location.reload(), 1500);
+  } else {
+    showToast('❌ ' + (result.error || 'Erreur'), 'error');
+    btn.innerHTML = '<i class="fas fa-check"></i> Mettre en vente';
+    btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// PUBLICITÉS
+// ═══════════════════════════════════════════════════
+
+async function createAd(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = {
+    title: form.title.value.trim(),
+    description: form.description.value.trim(),
+    target_url: form.target_url.value.trim(),
+    image_url: form.image_url?.value?.trim() || '',
+    budget: parseInt(form.budget.value),
+    ad_type: form.ad_type.value
+  };
+
+  const btn = form.querySelector('button[type=submit]');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lancement…';
+  btn.disabled = true;
+
+  const res = await fetch('/api/ads', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  const result = await res.json();
+  if (result.success) {
+    showToast('🚀 ' + result.message, 'success');
+    setTimeout(() => location.href = '/premium', 2000);
+  } else {
+    showToast('❌ ' + (result.error || 'Erreur'), 'error');
+    btn.innerHTML = '<i class="fas fa-rocket"></i> Lancer la publicité';
+    btn.disabled = false;
+  }
+}
+
+async function clickAd(adId) {
+  const res = await fetch(`/api/ads/${adId}/click`, { method: 'POST' });
+  const data = await res.json();
+  if (data.redirect) window.open(data.redirect, '_blank');
+}
+
+// ═══════════════════════════════════════════════════
+// TOAST NOTIFICATION
+// ═══════════════════════════════════════════════════
+
+function showToast(message, type = 'info') {
+  const existing = document.querySelector('.toast-notification');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = `toast-notification toast-${type}`;
+  toast.innerHTML = message;
+  toast.style.cssText = `
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: ${type === 'success' ? '#42B72A' : type === 'error' ? '#e74c3c' : '#1877F2'};
+    color: white; padding: 12px 24px; border-radius: 24px;
+    font-size: 14px; font-weight: 600; z-index: 10000;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    animation: slideUp .3s ease;
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+// Compter les messages non lus dans la navbar
+async function updateMsgCount() {
+  try {
+    const res = await fetch('/api/notifications/count');
+    // TODO: ajouter endpoint messages non lus
+  } catch {}
+}
