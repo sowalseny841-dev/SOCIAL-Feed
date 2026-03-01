@@ -24,17 +24,26 @@ jobs:
       - name: Create Gradle Wrapper
         working-directory: android-app
         run: |
+          # Download gradle-wrapper.jar if missing
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Downloading gradle-wrapper.jar..."
+            mkdir -p gradle/wrapper
+            wget -q "https://github.com/gradle/gradle/raw/v8.4.0/gradle/wrapper/gradle-wrapper.jar" \
+              -O gradle/wrapper/gradle-wrapper.jar
+            echo "gradle-wrapper.jar downloaded ($(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes)"
+          fi
+          # Generate gradlew if missing
           if [ ! -f gradlew ]; then
-            echo "Downloading Gradle 8.4..."
+            echo "Downloading Gradle 8.4 to generate wrapper..."
             wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
             /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version=8.4
           fi
           # Fix DEFAULT_JVM_OPTS to avoid quoting issues
-          sed -i 's/DEFAULT_JVM_OPTS=.*$/DEFAULT_JVM_OPTS='"'"'-Xmx4096m -Xms512m'"'"'/' gradlew
+          sed -i "s/DEFAULT_JVM_OPTS=.*$/DEFAULT_JVM_OPTS='-Xmx4096m -Xms512m'/" gradlew
           chmod +x gradlew
-          echo "DEFAULT_JVM_OPTS set to:"
-          grep "DEFAULT_JVM_OPTS=" gradlew | head -1
+          echo "DEFAULT_JVM_OPTS: $(grep 'DEFAULT_JVM_OPTS=' gradlew | head -1)"
+          echo "wrapper jar: $(ls -la gradle/wrapper/gradle-wrapper.jar)"
           echo "gradlew ready"
 
       - name: Decode Keystore
