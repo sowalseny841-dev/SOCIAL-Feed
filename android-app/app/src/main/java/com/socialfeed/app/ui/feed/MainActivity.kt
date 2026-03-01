@@ -8,7 +8,10 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -319,20 +322,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeData() {
         // Observer les posts
-        lifecycleScope.launchWhenStarted {
-            viewModel.posts.collect { posts ->
-                adapter.updatePosts(posts)
-                binding.swipeRefresh.isRefreshing = false
-                binding.tvEmptyFeed.visibility =
-                    if (posts.isEmpty()) View.VISIBLE else View.GONE
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.posts.collect { posts ->
+                    adapter.updatePosts(posts)
+                    binding.swipeRefresh.isRefreshing = false
+                    binding.tvEmptyFeed.visibility =
+                        if (posts.isEmpty()) View.VISIBLE else View.GONE
+                }
             }
         }
 
         // Observer le loading
-        lifecycleScope.launchWhenStarted {
-            viewModel.loading.collect { loading ->
-                binding.progressBar.visibility =
-                    if (loading) View.VISIBLE else View.GONE
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.loading.collect { loading ->
+                    binding.progressBar.visibility =
+                        if (loading) View.VISIBLE else View.GONE
+                }
             }
         }
     }
@@ -411,6 +418,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val lifecycleScope get() =
-        androidx.lifecycle.lifecycleScope
 }
