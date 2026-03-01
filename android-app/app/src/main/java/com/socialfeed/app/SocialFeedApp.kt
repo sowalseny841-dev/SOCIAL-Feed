@@ -5,9 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import com.google.firebase.FirebaseApp
-import dagger.hilt.android.HiltAndroidApp
 
-@HiltAndroidApp
 class SocialFeedApp : Application() {
     override fun onCreate() {
         super.onCreate()

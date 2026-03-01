@@ -24,7 +24,6 @@ jobs:
       - name: Create Gradle Wrapper
         working-directory: android-app
         run: |
-          # Download gradle-wrapper.jar if missing
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
             echo "Downloading gradle-wrapper.jar..."
             mkdir -p gradle/wrapper
@@ -32,19 +31,15 @@ jobs:
               -O gradle/wrapper/gradle-wrapper.jar
             echo "gradle-wrapper.jar downloaded ($(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes)"
           fi
-          # Generate gradlew if missing
           if [ ! -f gradlew ]; then
             echo "Downloading Gradle 8.4 to generate wrapper..."
             wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
             /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version=8.4
           fi
-          # Fix DEFAULT_JVM_OPTS to avoid quoting issues
           sed -i "s/DEFAULT_JVM_OPTS=.*$/DEFAULT_JVM_OPTS='-Xmx4096m -Xms512m'/" gradlew
           chmod +x gradlew
-          echo "DEFAULT_JVM_OPTS: $(grep 'DEFAULT_JVM_OPTS=' gradlew | head -1)"
-          echo "wrapper jar: $(ls -la gradle/wrapper/gradle-wrapper.jar)"
-          echo "gradlew ready"
+          echo "gradlew ready: $(ls -la gradlew)"
 
       - name: Decode Keystore
         run: |
@@ -123,7 +118,6 @@ jobs:
             <foreground android:drawable="@drawable/ic_notification"/>
           </adaptive-icon>'''
 
-          # Simple PNG-like launcher for non-v26 (just a solid color shape)
           simple_launcher = '''<?xml version="1.0" encoding="utf-8"?>
           <shape xmlns:android="http://schemas.android.com/apk/res/android"
               android:shape="oval">
@@ -131,10 +125,8 @@ jobs:
           </shape>'''
 
           for density in ["hdpi","mdpi","xhdpi","xxhdpi","xxxhdpi"]:
-              # Normal mipmap - use simple shape (no adaptive-icon)
               files[f"{base}/mipmap-{density}/ic_launcher.xml"] = simple_launcher
               files[f"{base}/mipmap-{density}/ic_launcher_round.xml"] = simple_launcher
-              # v26+ mipmap - can use adaptive-icon
               os.makedirs(f"{base}/mipmap-{density}-v26", exist_ok=True)
               files[f"{base}/mipmap-{density}-v26/ic_launcher.xml"] = launcher_xml
               files[f"{base}/mipmap-{density}-v26/ic_launcher_round.xml"] = launcher_xml
@@ -146,16 +138,26 @@ jobs:
           print("Resources created successfully")
           PYEOF
 
-      - name: Verify Kotlin sources
+      - name: Verify Kotlin sources (no Hilt)
         run: |
           echo "=== Checking committed Kotlin files ==="
           ls -la android-app/app/src/main/java/com/socialfeed/app/
-          ls -la android-app/app/src/main/java/com/socialfeed/app/di/ 2>/dev/null || echo "di/ missing"
-          ls -la android-app/app/src/main/java/com/socialfeed/app/services/ 2>/dev/null || echo "services/ missing"
           ls -la android-app/app/src/main/java/com/socialfeed/app/ui/auth/
           ls -la android-app/app/src/main/java/com/socialfeed/app/ui/feed/
-          echo "=== SocialFeedApp.kt first lines ==="
-          head -5 android-app/app/src/main/java/com/socialfeed/app/SocialFeedApp.kt
+          echo "=== Checking NO Hilt annotations ==="
+          if grep -r "@HiltAndroidApp\|@AndroidEntryPoint\|@HiltViewModel\|@Inject constructor" \
+               android-app/app/src/main/java/ 2>/dev/null; then
+            echo "WARNING: Hilt annotations found but Hilt is removed from build.gradle!"
+            echo "Checking each file..."
+            grep -rn "@HiltAndroidApp\|@AndroidEntryPoint\|@HiltViewModel\|@Inject constructor" \
+               android-app/app/src/main/java/ || true
+          else
+            echo "OK: No Hilt annotations found"
+          fi
+          echo "=== SocialFeedApp.kt ==="
+          cat android-app/app/src/main/java/com/socialfeed/app/SocialFeedApp.kt
+          echo "=== build.gradle plugins ==="
+          head -10 android-app/app/build.gradle
 
       - name: Build Debug APK
         working-directory: android-app
@@ -194,7 +196,6 @@ jobs:
       - name: Build Summary
         if: success()
         run: |
-          echo "BUILD SUCCESS"
+          echo "BUILD SUCCESS - v1.3.0 (No Hilt)"
           echo "APK Debug: app/build/outputs/apk/debug/app-debug.apk"
           echo "AAB Release: app/build/outputs/bundle/release/app-release.aab"
-          echo "Download from Actions tab > Artifacts"

@@ -6,10 +6,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
@@ -24,13 +24,10 @@ import com.google.firebase.firestore.Query
 import com.socialfeed.app.databinding.ActivityMainBinding
 import com.socialfeed.app.databinding.ItemPostBinding
 import com.socialfeed.app.ui.auth.AuthActivity
-import dagger.hilt.android.AndroidEntryPoint
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import javax.inject.Inject
 
 // ── Modèle Post ───────────────────────────────────────────────────────────────
 data class Post(
@@ -64,12 +61,11 @@ class PostDiffCallback(
     }
 }
 
-// ── ViewModel Feed ────────────────────────────────────────────────────────────
-@HiltViewModel
-class FeedViewModel @Inject constructor(
-    private val auth: FirebaseAuth,
-    private val db: FirebaseFirestore
-) : ViewModel() {
+// ── ViewModel Feed (sans Hilt) ────────────────────────────────────────────────
+class FeedViewModel : ViewModel() {
+
+    private val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
 
     private val _posts = MutableStateFlow<List<Post>>(emptyList())
     val posts: StateFlow<List<Post>> = _posts
@@ -86,7 +82,6 @@ class FeedViewModel @Inject constructor(
             _loading.value = true
             try {
                 val uid = currentUserId
-                // 1) Charger les posts
                 val snapshot = db.collection("posts")
                     .orderBy("createdAt", Query.Direction.DESCENDING)
                     .limit(30)
@@ -109,8 +104,7 @@ class FeedViewModel @Inject constructor(
                     } catch (e: Exception) { null }
                 }
 
-                // 2) Charger les likes EN UNE SEULE requête (collection "userLikes/{uid}/posts")
-                //    Si uid vide (non connecté), skip
+                // Charger les likes en une seule requête
                 val likedPostIds = if (uid.isNotEmpty()) {
                     try {
                         db.collection("userLikes").document(uid)
@@ -120,8 +114,7 @@ class FeedViewModel @Inject constructor(
                     } catch (e: Exception) { emptySet() }
                 } else emptySet<String>()
 
-                val finalList = postList.map { it.copy(isLikedByMe = it.id in likedPostIds) }
-                _posts.value = finalList
+                _posts.value = postList.map { it.copy(isLikedByMe = it.id in likedPostIds) }
 
             } catch (e: Exception) {
                 // Ne pas crasher — garder l'état actuel
@@ -149,7 +142,6 @@ class FeedViewModel @Inject constructor(
                         "createdAt" to com.google.firebase.Timestamp.now()
                     )
                 ).await()
-                // Incrémenter postsCount en arrière-plan (ne pas bloquer)
                 db.collection("users").document(user.uid)
                     .update("postsCount", com.google.firebase.firestore.FieldValue.increment(1))
                 loadPosts()
@@ -165,16 +157,15 @@ class FeedViewModel @Inject constructor(
             val uid = currentUserId
             if (uid.isEmpty()) return@launch
             try {
-                // Mise à jour optimiste locale immédiate (pas de rechargement complet)
+                // Mise à jour optimiste locale immédiate
                 val currentPosts = _posts.value.toMutableList()
                 val idx = currentPosts.indexOfFirst { it.id == post.id }
                 if (idx >= 0) {
-                    val updated = currentPosts[idx].copy(
+                    currentPosts[idx] = currentPosts[idx].copy(
                         isLikedByMe = !post.isLikedByMe,
                         likesCount = if (post.isLikedByMe) post.likesCount - 1 else post.likesCount + 1
                     )
-                    currentPosts[idx] = updated
-                    _posts.value = currentPosts
+                    _posts.value = currentPosts.toList()
                 }
 
                 val likeRef = db.collection("userLikes").document(uid)
@@ -182,18 +173,13 @@ class FeedViewModel @Inject constructor(
                 val postRef = db.collection("posts").document(post.id)
 
                 if (post.isLikedByMe) {
-                    // Retirer le like
                     likeRef.delete()
-                    postRef.update("likesCount",
-                        com.google.firebase.firestore.FieldValue.increment(-1))
+                    postRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(-1))
                 } else {
-                    // Ajouter le like
                     likeRef.set(mapOf("timestamp" to com.google.firebase.Timestamp.now()))
-                    postRef.update("likesCount",
-                        com.google.firebase.firestore.FieldValue.increment(1))
+                    postRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(1))
                 }
             } catch (e: Exception) {
-                // En cas d'erreur, recharger l'état réel
                 loadPosts()
             }
         }
@@ -203,11 +189,45 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 db.collection("posts").document(postId).delete().await()
-                // Retirer localement sans recharger tout
                 _posts.value = _posts.value.filter { it.id != postId }
                 onDone()
             } catch (e: Exception) {
                 onDone()
+            }
+        }
+    }
+
+    fun addComment(postId: String, content: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val uid = currentUserId
+            if (uid.isEmpty()) { onDone(false); return@launch }
+            try {
+                val userDoc = db.collection("users").document(uid).get().await()
+                db.collection("posts").document(postId)
+                    .collection("comments").add(
+                        mapOf(
+                            "userId" to uid,
+                            "username" to (userDoc.getString("username") ?: ""),
+                            "displayName" to (userDoc.getString("displayName") ?: ""),
+                            "userAvatarUrl" to (userDoc.getString("avatarUrl") ?: ""),
+                            "content" to content,
+                            "createdAt" to com.google.firebase.Timestamp.now()
+                        )
+                    ).await()
+                db.collection("posts").document(postId)
+                    .update("commentsCount", com.google.firebase.firestore.FieldValue.increment(1))
+                // Mise à jour locale
+                val currentPosts = _posts.value.toMutableList()
+                val idx = currentPosts.indexOfFirst { it.id == postId }
+                if (idx >= 0) {
+                    currentPosts[idx] = currentPosts[idx].copy(
+                        commentsCount = currentPosts[idx].commentsCount + 1
+                    )
+                    _posts.value = currentPosts.toList()
+                }
+                onDone(true)
+            } catch (e: Exception) {
+                onDone(false)
             }
         }
     }
@@ -253,7 +273,6 @@ class PostAdapter(
             ).toString()
         } ?: "À l'instant"
 
-        // Avatar avec cache et fallback
         if (post.userAvatarUrl.isNotEmpty()) {
             Glide.with(b.root)
                 .load(post.userAvatarUrl)
@@ -266,32 +285,22 @@ class PostAdapter(
             b.ivAvatar.setImageResource(com.socialfeed.app.R.drawable.ic_default_avatar)
         }
 
-        // Image du post
         if (post.imageUrl.isNotEmpty()) {
             b.ivPostImage.visibility = View.VISIBLE
             Glide.with(b.root)
                 .load(post.imageUrl)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .centerCrop()
-                .placeholder(android.R.color.darker_gray)
-                .error(android.R.color.darker_gray)
                 .into(b.ivPostImage)
         } else {
             b.ivPostImage.visibility = View.GONE
         }
 
-        // Bouton like — mise à jour visuelle immédiate
         b.btnLike.text = if (post.isLikedByMe) "❤️ J'aime" else "🤍 J'aime"
         b.btnLike.setOnClickListener { onLike(post) }
-
-        // Bouton commenter
         b.btnComment.setOnClickListener { onComment(post) }
-
-        // Supprimer (seulement pour l'auteur)
         b.btnDelete.visibility = if (post.userId == currentUserId) View.VISIBLE else View.GONE
         b.btnDelete.setOnClickListener { onDelete(post) }
-
-        // Profil
         b.ivAvatar.setOnClickListener { onProfile(post) }
         b.tvDisplayName.setOnClickListener { onProfile(post) }
     }
@@ -299,22 +308,25 @@ class PostAdapter(
     fun updatePosts(newPosts: List<Post>) {
         val diff = DiffUtil.calculateDiff(PostDiffCallback(posts, newPosts))
         posts = newPosts
-        diff.dispatchUpdatesTo(this)  // Mise à jour partielle (pas notifyDataSetChanged)
+        diff.dispatchUpdatesTo(this)
     }
 }
 
-// ── MainActivity ──────────────────────────────────────────────────────────────
-@AndroidEntryPoint
+// ── MainActivity (sans Hilt) ──────────────────────────────────────────────────
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val viewModel: FeedViewModel by viewModels()
+    private lateinit var viewModel: FeedViewModel
     private lateinit var adapter: PostAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Créer le ViewModel sans Hilt
+        viewModel = ViewModelProvider(this)[FeedViewModel::class.java]
+
         setupRecyclerView()
         setupCreatePost()
         setupBottomNav()
@@ -338,7 +350,6 @@ class MainActivity : AppCompatActivity() {
         )
         binding.rvFeed.layoutManager = LinearLayoutManager(this)
         binding.rvFeed.adapter = adapter
-        // Optimisation scrolling
         binding.rvFeed.setHasFixedSize(false)
         binding.rvFeed.recycledViewPool.setMaxRecycledViews(0, 10)
 
@@ -355,10 +366,10 @@ class MainActivity : AppCompatActivity() {
     private fun setupBottomNav() {
         binding.btnNavFeed.setOnClickListener { /* déjà ici */ }
         binding.btnNavNotifications.setOnClickListener {
-            Toast.makeText(this, "Notifications", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Notifications à venir", Toast.LENGTH_SHORT).show()
         }
         binding.btnNavProfile.setOnClickListener {
-            Toast.makeText(this, "Profil", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Profil à venir", Toast.LENGTH_SHORT).show()
         }
         binding.btnNavLogout.setOnClickListener {
             viewModel.logout()
@@ -429,49 +440,18 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Envoyer") { _, _ ->
                 val content = input.text.toString().trim()
-                if (content.isNotEmpty()) addComment(post.id, content)
+                if (content.isNotEmpty()) {
+                    viewModel.addComment(post.id, content) { success ->
+                        runOnUiThread {
+                            if (success)
+                                Toast.makeText(this, "💬 Commentaire ajouté", Toast.LENGTH_SHORT).show()
+                            else
+                                Toast.makeText(this, "Erreur réseau", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             }
             .setNegativeButton("Annuler", null)
             .show()
     }
-
-    private fun addComment(postId: String, content: String) {
-        val uid = viewModel.currentUserId
-        if (uid.isEmpty()) return
-
-        lifecycleScope.launch {
-            try {
-                val userDoc = db.collection("users").document(uid).get().await()
-                db.collection("posts").document(postId)
-                    .collection("comments").add(
-                        mapOf(
-                            "userId" to uid,
-                            "username" to (userDoc.getString("username") ?: ""),
-                            "displayName" to (userDoc.getString("displayName") ?: ""),
-                            "userAvatarUrl" to (userDoc.getString("avatarUrl") ?: ""),
-                            "content" to content,
-                            "createdAt" to com.google.firebase.Timestamp.now()
-                        )
-                    ).await()
-                // Incrémenter en arrière-plan
-                db.collection("posts").document(postId)
-                    .update("commentsCount",
-                        com.google.firebase.firestore.FieldValue.increment(1))
-                // Mise à jour locale du compteur sans recharger tout
-                val currentPosts = viewModel.posts.value.toMutableList()
-                val idx = currentPosts.indexOfFirst { it.id == postId }
-                if (idx >= 0) {
-                    currentPosts[idx] = currentPosts[idx].copy(
-                        commentsCount = currentPosts[idx].commentsCount + 1
-                    )
-                }
-                Toast.makeText(this@MainActivity, "💬 Commentaire ajouté", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Erreur réseau", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    // Référence db locale pour addComment
-    private val db by lazy { FirebaseFirestore.getInstance() }
 }
