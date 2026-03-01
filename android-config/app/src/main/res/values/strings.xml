@@ -61,6 +61,12 @@
     <string name="permission_camera_rationale">L\'accès à la caméra est nécessaire pour prendre une photo de profil</string>
     <string name="permission_storage_rationale">L\'accès à la galerie est nécessaire pour choisir une photo</string>
 
+    <!-- Firebase – Project Info (social-feed-60bab) -->
+    <string name="firebase_project_id">social-feed-60bab</string>
+    <string name="firebase_project_number">829086908698</string>
+    <string name="firebase_storage_bucket">social-feed-60bab.firebasestorage.app</string>
+    <string name="firebase_app_id">1:829086908698:android:d23d0a1b767f8b80142ca3</string>
+
     <!-- Play Store – Politique de confidentialité -->
     <string name="privacy_policy_url">https://socialfeed.pages.dev/privacy</string>
     <string name="terms_of_service_url">https://socialfeed.pages.dev/terms</string>

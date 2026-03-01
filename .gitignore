@@ -31,3 +31,17 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+
+# ─── Android / Firebase – FICHIERS SENSIBLES ──────────────────────────────
+# Ne JAMAIS committer ces fichiers sur Git public !
+android-config/app/google-services.json
+android-config/keystore.properties
+android-config/keystore/
+*.jks
+*.keystore
+
+# Fichiers de build Android
+android-config/.gradle/
+android-config/app/build/
+android-config/build/
+android-config/local.properties
