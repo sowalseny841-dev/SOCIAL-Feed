@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Télécharger SocialFeed</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1877F2 0%, #0d5cbf 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .logo {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #1877F2, #42B72A);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 36px;
+    }
+    h1 { font-size: 28px; color: #1c1e21; margin-bottom: 8px; }
+    .version { color: #42B72A; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+    .subtitle { color: #65676b; font-size: 15px; margin-bottom: 30px; }
+    .features {
+      background: #f0f2f5;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 28px;
+      text-align: left;
+    }
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+      font-size: 14px;
+      color: #1c1e21;
+    }
+    .feature-icon { font-size: 18px; flex-shrink: 0; }
+    .btn-download {
+      display: block;
+      width: 100%;
+      background: linear-gradient(135deg, #1877F2, #0d5cbf);
+      color: white;
+      text-decoration: none;
+      padding: 18px 24px;
+      border-radius: 14px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 4px 15px rgba(24, 119, 242, 0.4);
+    }
+    .btn-download:active {
+      transform: scale(0.97);
+      box-shadow: 0 2px 8px rgba(24, 119, 242, 0.3);
+    }
+    .btn-download span { display: block; font-size: 13px; font-weight: 400; opacity: 0.85; margin-top: 4px; }
+    .info {
+      margin-top: 20px;
+      font-size: 13px;
+      color: #65676b;
+      line-height: 1.6;
+    }
+    .info strong { color: #1c1e21; }
+    .steps {
+      margin-top: 24px;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: left;
+    }
+    .steps h3 { font-size: 14px; color: #f57f17; margin-bottom: 10px; }
+    .steps ol { padding-left: 18px; }
+    .steps li { font-size: 13px; color: #555; margin-bottom: 6px; line-height: 1.4; }
+    .badge {
+      display: inline-block;
+      background: #e7f3ff;
+      color: #1877F2;
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">📱</div>
+    <div class="badge">✅ Version stable</div>
+    <h1>SocialFeed</h1>
+    <div class="version">v1.3.0 — Sans crash</div>
+    <p class="subtitle">Le réseau social moderne pour rester connecté</p>
+
+    <div class="features">
+      <div class="feature"><span class="feature-icon">🔐</span> Authentification Firebase sécurisée</div>
+      <div class="feature"><span class="feature-icon">📰</span> Fil d'actualité en temps réel</div>
+      <div class="feature"><span class="feature-icon">💬</span> Messagerie privée</div>
+      <div class="feature"><span class="feature-icon">📞</span> Appels audio & vidéo</div>
+      <div class="feature"><span class="feature-icon">🎬</span> Reels & créateur</div>
+      <div class="feature"><span class="feature-icon">🛒</span> Marketplace intégré</div>
+    </div>
+
+    <a href="/SocialFeed-v1.3-debug.apk" class="btn-download" download="SocialFeed-v1.3-debug.apk">
+      ⬇️ Télécharger l'APK
+      <span>13 Mo — Android 7.0+</span>
+    </a>
+
+    <div class="steps">
+      <h3>⚙️ Installation</h3>
+      <ol>
+        <li>Appuyez sur le bouton ci-dessus</li>
+        <li>Ouvrez le fichier téléchargé dans les notifications</li>
+        <li>Si demandé : Paramètres → Sécurité → <strong>Sources inconnues</strong> ✓</li>
+        <li>Appuyez sur <strong>Installer</strong></li>
+        <li>Désinstallez l'ancienne version si elle existe</li>
+      </ol>
+    </div>
+
+    <p class="info">
+      🔒 Fichier sûr, buildé via GitHub Actions<br/>
+      📦 APK debug signé — pour usage personnel
+    </p>
+  </div>
+</body>
+</html>

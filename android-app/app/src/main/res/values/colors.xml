@@ -8,4 +8,8 @@
     <color name="text_primary">#050505</color>
     <color name="text_secondary">#65676B</color>
     <color name="red">#F3425F</color>
+    <color name="white">#FFFFFF</color>
+    <color name="colorPrimary">#1877F2</color>
+    <color name="colorPrimaryDark">#166FE5</color>
+    <color name="colorAccent">#42B72A</color>
 </resources>

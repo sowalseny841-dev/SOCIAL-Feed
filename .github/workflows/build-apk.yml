@@ -50,114 +50,104 @@ jobs:
         run: |
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android-app/app/google-services.json
 
-      - name: Create Android resources
+      - name: Create Android drawable resources
         run: |
           python3 << 'PYEOF'
           import os
 
           base = "android-app/app/src/main/res"
+
+          # Créer les dossiers nécessaires
           dirs = [
             f"{base}/drawable",
-            f"{base}/mipmap-hdpi", f"{base}/mipmap-mdpi",
-            f"{base}/mipmap-xhdpi", f"{base}/mipmap-xxhdpi", f"{base}/mipmap-xxxhdpi",
-            f"{base}/values"
+            f"{base}/mipmap-hdpi",   f"{base}/mipmap-mdpi",
+            f"{base}/mipmap-xhdpi",  f"{base}/mipmap-xxhdpi",
+            f"{base}/mipmap-xxxhdpi",
+            f"{base}/xml"
           ]
           for d in dirs:
               os.makedirs(d, exist_ok=True)
 
-          files = {
+          # Drawables seulement (NE PAS écraser colors.xml, strings.xml, themes.xml commitées)
+          drawables = {
             f"{base}/drawable/ic_notification.xml": '''<?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp" android:height="24dp"
-              android:viewportWidth="24" android:viewportHeight="24">
-            <path android:fillColor="#FFFFFF"
-                android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07-1.64,-5.64-4.5,-6.32V4c0,-0.83-0.67,-1.5-1.5,-1.5s-1.5,0.67-1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"/>
-          </vector>''',
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+  <path android:fillColor="#FFFFFF"
+      android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07-1.64,-5.64-4.5,-6.32V4c0,-0.83-0.67,-1.5-1.5,-1.5s-1.5,0.67-1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"/>
+</vector>''',
             f"{base}/drawable/ic_default_avatar.xml": '''<?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="44dp" android:height="44dp"
-              android:viewportWidth="44" android:viewportHeight="44">
-            <path android:fillColor="#1877F2" android:pathData="M22,22m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
-            <path android:fillColor="#FFFFFF" android:pathData="M22,12a6,6 0,1 0,0 12a6,6 0,0 0,0-12zM10,30c0,-4 5.4,-7 12,-7s12,3 12,7v2H10v-2z"/>
-          </vector>''',
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp" android:height="44dp"
+    android:viewportWidth="44" android:viewportHeight="44">
+  <path android:fillColor="#1877F2" android:pathData="M22,22m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
+  <path android:fillColor="#FFFFFF" android:pathData="M22,12a6,6 0,1 0,0 12a6,6 0,0 0,0-12zM10,30c0,-4 5.4,-7 12,-7s12,3 12,7v2H10v-2z"/>
+</vector>''',
             f"{base}/drawable/bg_card.xml": '''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FFFFFF"/>
-            <corners android:radius="12dp"/>
-            <stroke android:width="1dp" android:color="#E4E6EB"/>
-          </shape>''',
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+  <solid android:color="#FFFFFF"/>
+  <corners android:radius="12dp"/>
+  <stroke android:width="1dp" android:color="#E4E6EB"/>
+</shape>''',
             f"{base}/drawable/bg_input_rounded.xml": '''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#F0F2F5"/>
-            <corners android:radius="24dp"/>
-          </shape>''',
-            f"{base}/drawable/bg_btn_circle.xml": '''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-            <solid android:color="#1877F2"/>
-          </shape>''',
-            f"{base}/values/colors.xml": '''<?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <color name="primary">#1877F2</color>
-              <color name="primary_dark">#166FE5</color>
-              <color name="primaryDark">#166FE5</color>
-              <color name="secondary">#42B72A</color>
-              <color name="accent">#42B72A</color>
-              <color name="background">#F0F2F5</color>
-              <color name="white">#FFFFFF</color>
-              <color name="text">#1C1E21</color>
-              <color name="textSecondary">#65676B</color>
-              <color name="colorPrimary">#1877F2</color>
-              <color name="colorPrimaryDark">#166FE5</color>
-              <color name="colorAccent">#42B72A</color>
-          </resources>''',
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+  <solid android:color="#F0F2F5"/>
+  <corners android:radius="24dp"/>
+</shape>''',
           }
 
-          launcher_xml = '''<?xml version="1.0" encoding="utf-8"?>
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-            <background android:drawable="@color/primary"/>
-            <foreground android:drawable="@drawable/ic_notification"/>
-          </adaptive-icon>'''
-
+          # Launcher icons simples
           simple_launcher = '''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="oval">
-            <solid android:color="#1877F2"/>
-          </shape>'''
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+  <solid android:color="#1877F2"/>
+</shape>'''
+
+          adaptive_launcher = '''<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <background android:drawable="@color/primary"/>
+  <foreground android:drawable="@drawable/ic_notification"/>
+</adaptive-icon>'''
 
           for density in ["hdpi","mdpi","xhdpi","xxhdpi","xxxhdpi"]:
-              files[f"{base}/mipmap-{density}/ic_launcher.xml"] = simple_launcher
-              files[f"{base}/mipmap-{density}/ic_launcher_round.xml"] = simple_launcher
+              drawables[f"{base}/mipmap-{density}/ic_launcher.xml"] = simple_launcher
+              drawables[f"{base}/mipmap-{density}/ic_launcher_round.xml"] = simple_launcher
               os.makedirs(f"{base}/mipmap-{density}-v26", exist_ok=True)
-              files[f"{base}/mipmap-{density}-v26/ic_launcher.xml"] = launcher_xml
-              files[f"{base}/mipmap-{density}-v26/ic_launcher_round.xml"] = launcher_xml
+              drawables[f"{base}/mipmap-{density}-v26/ic_launcher.xml"] = adaptive_launcher
+              drawables[f"{base}/mipmap-{density}-v26/ic_launcher_round.xml"] = adaptive_launcher
 
-          for path, content in files.items():
+          # file_paths.xml pour FileProvider
+          drawables[f"{base}/xml/file_paths.xml"] = '''<?xml version="1.0" encoding="utf-8"?>
+<paths>
+  <external-files-path name="camera_photos" path="Pictures/"/>
+  <cache-path name="cached_files" path="."/>
+</paths>'''
+
+          for path, content in drawables.items():
               with open(path, 'w') as f:
                   f.write(content)
 
-          print("Resources created successfully")
+          print(f"Created {len(drawables)} resource files")
           PYEOF
 
-      - name: Verify Kotlin sources (no Hilt)
+      - name: Verify build setup
         run: |
-          echo "=== Checking committed Kotlin files ==="
-          ls -la android-app/app/src/main/java/com/socialfeed/app/
-          ls -la android-app/app/src/main/java/com/socialfeed/app/ui/auth/
-          ls -la android-app/app/src/main/java/com/socialfeed/app/ui/feed/
-          echo "=== Checking NO Hilt annotations ==="
+          echo "=== Kotlin files ==="
+          find android-app/app/src/main/java -name "*.kt" | sort
+          echo "=== NO Hilt annotations ==="
           if grep -r "@HiltAndroidApp\|@AndroidEntryPoint\|@HiltViewModel\|@Inject constructor" \
                android-app/app/src/main/java/ 2>/dev/null; then
-            echo "WARNING: Hilt annotations found but Hilt is removed from build.gradle!"
-            echo "Checking each file..."
-            grep -rn "@HiltAndroidApp\|@AndroidEntryPoint\|@HiltViewModel\|@Inject constructor" \
-               android-app/app/src/main/java/ || true
+            echo "ERROR: Hilt annotations found!"
+            exit 1
           else
-            echo "OK: No Hilt annotations found"
+            echo "OK: No Hilt annotations"
           fi
-          echo "=== SocialFeedApp.kt ==="
-          cat android-app/app/src/main/java/com/socialfeed/app/SocialFeedApp.kt
-          echo "=== build.gradle plugins ==="
-          head -10 android-app/app/build.gradle
+          echo "=== Manifest check ==="
+          grep -c "FCMService\|AuthActivity\|MainActivity" android-app/app/src/main/AndroidManifest.xml
+          echo "=== Theme used ==="
+          grep "Theme\." android-app/app/src/main/res/values/themes.xml
+          echo "=== build.gradle version ==="
+          grep "versionName\|versionCode" android-app/app/build.gradle
 
       - name: Build Debug APK
         working-directory: android-app
@@ -196,6 +186,8 @@ jobs:
       - name: Build Summary
         if: success()
         run: |
-          echo "BUILD SUCCESS - v1.3.0 (No Hilt)"
-          echo "APK Debug: app/build/outputs/apk/debug/app-debug.apk"
-          echo "AAB Release: app/build/outputs/bundle/release/app-release.aab"
+          echo "BUILD SUCCESS - v1.5.0"
+          echo "Theme: MaterialComponents (stable)"
+          echo "Hilt: removed"
+          echo "ProGuard: configured"
+          echo "APK: app/build/outputs/apk/debug/app-debug.apk"

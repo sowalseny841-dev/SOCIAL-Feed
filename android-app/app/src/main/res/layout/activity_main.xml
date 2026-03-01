@@ -4,29 +4,22 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F0F2F5">
+    android:background="@color/background">
 
     <!-- AppBar -->
     <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:elevation="4dp">
+        android:theme="@style/ThemeOverlay.MaterialComponents.Dark.ActionBar">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="#1877F2">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📱 SocialFeed"
-                android:textColor="#FFFFFF"
-                android:textSize="20sp"
-                android:textStyle="bold"/>
-
-        </androidx.appcompat.widget.Toolbar>
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/primary"
+            android:title="SocialFeed"
+            android:titleTextColor="@color/white" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -37,69 +30,69 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Zone de création de post -->
+        <!-- Zone création de post -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:background="#FFFFFF"
+            android:background="@color/surface"
             android:padding="12dp"
-            android:elevation="2dp"
-            android:layout_marginBottom="8dp">
+            android:elevation="2dp">
 
             <ImageView
                 android:id="@+id/ivCurrentUserAvatar"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@drawable/ic_default_avatar"
-                android:layout_marginEnd="10dp"
-                android:scaleType="centerCrop"/>
+                android:scaleType="centerCrop"
+                android:layout_marginEnd="10dp" />
 
             <TextView
                 android:id="@+id/etCreatePostHint"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:text="Quoi de neuf ?"
-                android:textColor="#65676B"
-                android:textSize="16sp"
-                android:background="@drawable/bg_input_rounded"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:gravity="center_vertical"/>
+                android:textColor="@color/text_secondary"
+                android:background="#F0F2F5"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:gravity="center_vertical"
+                android:textSize="15sp" />
 
             <ImageButton
                 android:id="@+id/btnCreatePost"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:src="@android:drawable/ic_menu_send"
-                android:background="@drawable/bg_btn_circle"
-                android:layout_marginStart="8dp"
-                android:tint="#FFFFFF"/>
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_input_add"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/primary"
+                android:layout_marginStart="8dp" />
 
         </LinearLayout>
 
-        <!-- Progress bar -->
+        <!-- ProgressBar -->
         <ProgressBar
             android:id="@+id/progressBar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:visibility="gone"/>
+            android:visibility="gone"
+            android:layout_marginTop="8dp" />
 
-        <!-- Feed vide -->
+        <!-- Message feed vide -->
         <TextView
             android:id="@+id/tvEmptyFeed"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🌟 Aucune publication pour l'instant.\nSoyez le premier à publier !"
-            android:textColor="#65676B"
+            android:text="Aucune publication pour l'instant.\nSoyez le premier à publier !"
+            android:textColor="@color/text_secondary"
             android:textSize="16sp"
             android:gravity="center"
-            android:padding="48dp"
-            android:visibility="gone"/>
+            android:padding="32dp"
+            android:visibility="gone" />
 
-        <!-- Liste des posts -->
+        <!-- Feed + SwipeRefresh -->
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/swipeRefresh"
             android:layout_width="match_parent"
@@ -111,16 +104,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:paddingBottom="8dp"/>
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp" />
 
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-        <!-- Bottom Navigation -->
+        <!-- Navigation bas -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:orientation="horizontal"
-            android:background="#FFFFFF"
+            android:background="@color/surface"
             android:elevation="8dp">
 
             <ImageButton
@@ -128,9 +122,10 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:src="@android:drawable/ic_menu_agenda"
+                android:src="@android:drawable/ic_menu_today"
+                android:tint="@color/primary"
                 android:background="?attr/selectableItemBackground"
-                android:tint="#1877F2"/>
+                android:contentDescription="Accueil" />
 
             <ImageButton
                 android:id="@+id/btnNavNotifications"
@@ -138,8 +133,9 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:src="@android:drawable/ic_popup_reminder"
+                android:tint="@color/text_secondary"
                 android:background="?attr/selectableItemBackground"
-                android:tint="#65676B"/>
+                android:contentDescription="Notifications" />
 
             <ImageButton
                 android:id="@+id/btnNavProfile"
@@ -147,17 +143,19 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:src="@android:drawable/ic_menu_myplaces"
+                android:tint="@color/text_secondary"
                 android:background="?attr/selectableItemBackground"
-                android:tint="#65676B"/>
+                android:contentDescription="Profil" />
 
             <ImageButton
                 android:id="@+id/btnNavLogout"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:src="@android:drawable/ic_lock_power_off"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:tint="@color/text_secondary"
                 android:background="?attr/selectableItemBackground"
-                android:tint="#65676B"/>
+                android:contentDescription="Déconnexion" />
 
         </LinearLayout>
 
