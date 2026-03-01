@@ -146,57 +146,16 @@ jobs:
           print("Resources created successfully")
           PYEOF
 
-      - name: Create Hilt module
+      - name: Verify Kotlin sources
         run: |
-          mkdir -p android-app/app/src/main/java/com/socialfeed/app/di
-          mkdir -p android-app/app/src/main/java/com/socialfeed/app/services
-
-          python3 -c "
-          content = '''package com.socialfeed.app.di
-
-          import com.google.firebase.auth.FirebaseAuth
-          import com.google.firebase.firestore.FirebaseFirestore
-          import com.google.firebase.storage.FirebaseStorage
-          import dagger.Module
-          import dagger.Provides
-          import dagger.hilt.InstallIn
-          import dagger.hilt.components.SingletonComponent
-          import javax.inject.Singleton
-
-          @Module
-          @InstallIn(SingletonComponent::class)
-          object AppModule {
-              @Provides @Singleton
-              fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
-              @Provides @Singleton
-              fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
-              @Provides @Singleton
-              fun provideStorage(): FirebaseStorage = FirebaseStorage.getInstance()
-          }'''
-          with open('android-app/app/src/main/java/com/socialfeed/app/di/AppModule.kt','w') as f:
-              f.write(content)
-          print('AppModule created')
-          "
-
-          python3 -c "
-          content = '''package com.socialfeed.app.services
-
-          import com.google.firebase.messaging.FirebaseMessagingService
-          import com.google.firebase.messaging.RemoteMessage
-          import com.google.firebase.auth.FirebaseAuth
-          import com.google.firebase.firestore.FirebaseFirestore
-
-          class FCMService : FirebaseMessagingService() {
-              override fun onNewToken(token: String) {
-                  val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-                  FirebaseFirestore.getInstance().collection(\"users\").document(uid).update(\"fcmToken\", token)
-              }
-              override fun onMessageReceived(message: RemoteMessage) {}
-          }'''
-          with open('android-app/app/src/main/java/com/socialfeed/app/services/FCMService.kt','w') as f:
-              f.write(content)
-          print('FCMService created')
-          "
+          echo "=== Checking committed Kotlin files ==="
+          ls -la android-app/app/src/main/java/com/socialfeed/app/
+          ls -la android-app/app/src/main/java/com/socialfeed/app/di/ 2>/dev/null || echo "di/ missing"
+          ls -la android-app/app/src/main/java/com/socialfeed/app/services/ 2>/dev/null || echo "services/ missing"
+          ls -la android-app/app/src/main/java/com/socialfeed/app/ui/auth/
+          ls -la android-app/app/src/main/java/com/socialfeed/app/ui/feed/
+          echo "=== SocialFeedApp.kt first lines ==="
+          head -5 android-app/app/src/main/java/com/socialfeed/app/SocialFeedApp.kt
 
       - name: Build Debug APK
         working-directory: android-app

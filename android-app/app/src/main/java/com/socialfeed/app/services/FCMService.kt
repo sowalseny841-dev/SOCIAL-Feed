@@ -11,12 +11,12 @@ class FCMService : FirebaseMessagingService() {
         super.onNewToken(token)
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         FirebaseFirestore.getInstance()
-            .collection("users").document(uid)
+            .collection("users")
+            .document(uid)
             .update("fcmToken", token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        // Les notifications Firebase s'affichent automatiquement quand l'app est en arrière-plan
     }
 }
