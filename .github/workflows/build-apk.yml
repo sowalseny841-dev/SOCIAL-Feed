@@ -171,22 +171,20 @@ jobs:
       - name: Build Debug APK
         working-directory: android-app
         env:
-          GRADLE_OPTS: "-Xmx4g -Dorg.gradle.daemon=false"
           KEYSTORE_PATH: keystore/socialfeed-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g"
 
       - name: Build Release AAB
         working-directory: android-app
         env:
-          GRADLE_OPTS: "-Xmx4g -Dorg.gradle.daemon=false"
           KEYSTORE_PATH: keystore/socialfeed-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew bundleRelease --no-daemon --stacktrace
+        run: ./gradlew bundleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
