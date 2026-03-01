@@ -30,7 +30,11 @@ jobs:
             unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
             /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version=8.4
           fi
+          # Fix DEFAULT_JVM_OPTS to avoid quoting issues
+          sed -i 's/DEFAULT_JVM_OPTS=.*$/DEFAULT_JVM_OPTS='"'"'-Xmx4096m -Xms512m'"'"'/' gradlew
           chmod +x gradlew
+          echo "DEFAULT_JVM_OPTS set to:"
+          grep "DEFAULT_JVM_OPTS=" gradlew | head -1
           echo "gradlew ready"
 
       - name: Decode Keystore
