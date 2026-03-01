@@ -1,0 +1,233 @@
+name: 🚀 Build APK SocialFeed
+
+# Se déclenche à chaque push sur main
+on:
+  push:
+    branches: [ main ]
+  # Permet de lancer manuellement depuis GitHub
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK & AAB
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Récupérer le code ─────────────────────────────────────────────
+      - name: 📥 Checkout du code
+        uses: actions/checkout@v4
+
+      # ── 2. Configurer Java 17 ────────────────────────────────────────────
+      - name: ☕ Configurer JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # ── 3. Rendre gradlew exécutable ─────────────────────────────────────
+      - name: 🔧 Permissions Gradle
+        run: chmod +x android-app/gradlew
+
+      # ── 4. Décoder le Keystore depuis les secrets GitHub ─────────────────
+      - name: 🔑 Décoder le Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-app/keystore/socialfeed-release.jks
+
+      # ── 5. Créer le google-services.json depuis les secrets ───────────────
+      - name: 🔥 Créer google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android-app/app/google-services.json
+
+      # ── 6. Créer les drawables manquants ─────────────────────────────────
+      - name: 🎨 Créer ressources manquantes
+        run: |
+          # Icône notification simple
+          cat > android-app/app/src/main/res/drawable/ic_notification.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp" android:height="24dp"
+              android:viewportWidth="24" android:viewportHeight="24">
+            <path android:fillColor="#FFFFFF"
+                android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"/>
+          </vector>
+          EOF
+
+          # Avatar par défaut
+          cat > android-app/app/src/main/res/drawable/ic_default_avatar.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="44dp" android:height="44dp"
+              android:viewportWidth="44" android:viewportHeight="44">
+            <path android:fillColor="#1877F2"
+                android:pathData="M22,22m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
+            <path android:fillColor="#FFFFFF"
+                android:pathData="M22,12a6,6 0,1 0,0 12a6,6 0,0 0,0 -12zM10,30c0,-4 5.4,-7 12,-7s12,3 12,7v2H10v-2z"/>
+          </vector>
+          EOF
+
+          # Background carte
+          cat > android-app/app/src/main/res/drawable/bg_card.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#FFFFFF"/>
+            <corners android:radius="12dp"/>
+            <stroke android:width="1dp" android:color="#E4E6EB"/>
+          </shape>
+          EOF
+
+          # Background input arrondi
+          cat > android-app/app/src/main/res/drawable/bg_input_rounded.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#F0F2F5"/>
+            <corners android:radius="24dp"/>
+          </shape>
+          EOF
+
+          # Background bouton cercle
+          cat > android-app/app/src/main/res/drawable/bg_btn_circle.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="oval">
+            <solid android:color="#1877F2"/>
+          </shape>
+          EOF
+
+          # Icônes launcher PNG (placeholder)
+          mkdir -p android-app/app/src/main/res/mipmap-hdpi
+          mkdir -p android-app/app/src/main/res/mipmap-mdpi
+          mkdir -p android-app/app/src/main/res/mipmap-xhdpi
+          mkdir -p android-app/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android-app/app/src/main/res/mipmap-xxxhdpi
+
+      # ── 7. Créer le module DI Hilt ────────────────────────────────────────
+      - name: 🏗️ Créer module Hilt
+        run: |
+          mkdir -p android-app/app/src/main/java/com/socialfeed/app/di
+          cat > android-app/app/src/main/java/com/socialfeed/app/di/AppModule.kt << 'EOF'
+          package com.socialfeed.app.di
+
+          import com.google.firebase.auth.FirebaseAuth
+          import com.google.firebase.firestore.FirebaseFirestore
+          import com.google.firebase.storage.FirebaseStorage
+          import dagger.Module
+          import dagger.Provides
+          import dagger.hilt.InstallIn
+          import dagger.hilt.components.SingletonComponent
+          import javax.inject.Singleton
+
+          @Module
+          @InstallIn(SingletonComponent::class)
+          object AppModule {
+              @Provides @Singleton
+              fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
+
+              @Provides @Singleton
+              fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+
+              @Provides @Singleton
+              fun provideStorage(): FirebaseStorage = FirebaseStorage.getInstance()
+          }
+          EOF
+
+          # FCM Service minimal
+          mkdir -p android-app/app/src/main/java/com/socialfeed/app/services
+          cat > android-app/app/src/main/java/com/socialfeed/app/services/FCMService.kt << 'EOF'
+          package com.socialfeed.app.services
+
+          import com.google.firebase.messaging.FirebaseMessagingService
+          import com.google.firebase.messaging.RemoteMessage
+          import com.google.firebase.auth.FirebaseAuth
+          import com.google.firebase.firestore.FirebaseFirestore
+
+          class FCMService : FirebaseMessagingService() {
+              override fun onNewToken(token: String) {
+                  val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+                  FirebaseFirestore.getInstance().collection("users")
+                      .document(uid).update("fcmToken", token)
+              }
+              override fun onMessageReceived(message: RemoteMessage) {}
+          }
+          EOF
+
+          # proguard-rules.pro
+          cat > android-app/app/proguard-rules.pro << 'EOF'
+          -keep class com.google.firebase.** { *; }
+          -keep class com.google.android.gms.** { *; }
+          -keep class com.socialfeed.app.** { *; }
+          -keepattributes Signature
+          -keepattributes *Annotation*
+          -dontwarn com.google.firebase.**
+          EOF
+
+      # ── 8. Générer les icônes launcher ────────────────────────────────────
+      - name: 🖼️ Générer icônes launcher
+        run: |
+          # Icône vectorielle launcher
+          cat > android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml << 'EOF' 2>/dev/null || true
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+            <background android:drawable="@color/primary"/>
+            <foreground android:drawable="@drawable/ic_notification"/>
+          </adaptive-icon>
+          EOF
+          # Copier pour toutes les densités
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-mdpi/ic_launcher.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-xhdpi/ic_launcher.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-xxhdpi/ic_launcher.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-hdpi/ic_launcher_round.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-mdpi/ic_launcher_round.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-xhdpi/ic_launcher_round.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.xml 2>/dev/null || true
+          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.xml 2>/dev/null || true
+
+      # ── 9. Générer gradlew ────────────────────────────────────────────────
+      - name: ⚙️ Setup Gradle Wrapper
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+
+      # ── 10. Build DEBUG APK ───────────────────────────────────────────────
+      - name: 🔨 Build APK Debug
+        working-directory: android-app
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+          KEYSTORE_PATH: keystore/socialfeed-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: socialfeed
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      # ── 11. Build RELEASE AAB (Play Store) ───────────────────────────────
+      - name: 📦 Build AAB Release (Play Store)
+        working-directory: android-app
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
+        env:
+          KEYSTORE_PATH: keystore/socialfeed-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: socialfeed
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      # ── 12. Sauvegarder les artifacts ────────────────────────────────────
+      - name: 💾 Sauvegarder APK Debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: SocialFeed-Debug-APK
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: 💾 Sauvegarder AAB Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: SocialFeed-Release-AAB
+          path: android-app/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      # ── 13. Résumé ────────────────────────────────────────────────────────
+      - name: ✅ Résumé du build
+        run: |
+          echo "🎉 BUILD RÉUSSI !"
+          echo "📱 APK Debug : app/build/outputs/apk/debug/app-debug.apk"
+          echo "📦 AAB Release : app/build/outputs/bundle/release/app-release.aab"
+          echo "📥 Téléchargez les fichiers dans l'onglet Actions > Artifacts"
