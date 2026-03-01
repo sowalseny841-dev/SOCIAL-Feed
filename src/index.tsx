@@ -106,9 +106,11 @@ function navbar(user: any): string {
       <i class="fas fa-bell"></i>
       <span class="notif-badge hidden" id="notif-count"></span>
     </a>
+    <a href="/reels" class="nav-btn" title="Reels"><i class="fas fa-film"></i></a>
     <a href="/marketplace" class="nav-btn" title="Marketplace"><i class="fas fa-store"></i></a>
   </div>
   <div class="nav-right">
+    <a href="/creator" class="nav-btn nav-creator" title="Dashboard Créateur"><i class="fas fa-dollar-sign"></i></a>
     <a href="/premium" class="nav-btn nav-premium" title="Premium"><i class="fas fa-crown"></i></a>
     <a href="/profile/${user.username}" class="nav-avatar" title="${user.display_name}">
       ${user.avatar_url
@@ -126,7 +128,8 @@ function mobileNav(): string {
   <a href="/" class="mobile-nav-btn"><i class="fas fa-home"></i><span>Accueil</span></a>
   <a href="/friends" class="mobile-nav-btn"><i class="fas fa-user-friends"></i><span>Amis</span></a>
   <a href="/messages" class="mobile-nav-btn"><i class="fas fa-comment-dots"></i><span>Messages</span></a>
-  <a href="/marketplace" class="mobile-nav-btn"><i class="fas fa-store"></i><span>Shop</span></a>
+  <a href="/reels" class="mobile-nav-btn"><i class="fas fa-film"></i><span>Reels</span></a>
+  <a href="/creator" class="mobile-nav-btn mobile-creator"><i class="fas fa-dollar-sign"></i><span>Revenus</span></a>
   <a href="/premium" class="mobile-nav-btn mobile-premium"><i class="fas fa-crown"></i><span>Premium</span></a>
 </nav>`
 }
@@ -1922,5 +1925,884 @@ app.get('/api/users/search', authMiddleware, async (c) => {
   `).bind(`%${q}%`, `%${q}%`).all()
   return c.json({ users: res.results })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── SYSTÈME DE FOLLOWERS ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Toggle follow/unfollow
+app.post('/api/follow/:userId', authMiddleware, async (c) => {
+  const myId = c.get('userId')
+  const targetId = parseInt(c.req.param('userId'))
+  if (myId === targetId) return c.json({ error: 'Impossible de vous suivre vous-même' }, 400)
+
+  const existing = await c.env.DB.prepare(
+    'SELECT id FROM follows WHERE follower_id = ? AND following_id = ?'
+  ).bind(myId, targetId).first()
+
+  if (existing) {
+    await c.env.DB.prepare('DELETE FROM follows WHERE follower_id = ? AND following_id = ?').bind(myId, targetId).run()
+    // Décrémenter stats créateur
+    await c.env.DB.prepare(`
+      UPDATE creator_monetization SET followers_count = MAX(0, followers_count - 1),
+      last_stats_update = datetime('now') WHERE user_id = ?
+    `).bind(targetId).run().catch(() => {})
+    return c.json({ following: false })
+  } else {
+    await c.env.DB.prepare('INSERT INTO follows (follower_id, following_id) VALUES (?, ?)').bind(myId, targetId).run()
+    // Notification
+    await c.env.DB.prepare(
+      'INSERT INTO notifications (user_id, actor_id, type) VALUES (?, ?, "follow")'
+    ).bind(targetId, myId).run().catch(() => {})
+    // Incrémenter stats créateur & recalculer éligibilité
+    await updateCreatorStats(c.env.DB, targetId)
+    return c.json({ following: true })
+  }
+})
+
+// Récupérer le statut de follow
+app.get('/api/follow/:userId/status', authMiddleware, async (c) => {
+  const myId = c.get('userId')
+  const targetId = c.req.param('userId')
+  const f = await c.env.DB.prepare('SELECT id FROM follows WHERE follower_id = ? AND following_id = ?').bind(myId, targetId).first()
+  const counts = await c.env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM follows WHERE following_id = ?) AS followers,
+      (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following
+  `).bind(targetId, targetId).first() as any
+  return c.json({ following: !!f, followers: counts?.followers || 0, following_count: counts?.following || 0 })
+})
+
+// Helper : recalculer les stats créateur et vérifier l'éligibilité
+async function updateCreatorStats(db: D1Database, userId: number) {
+  const followers = await db.prepare('SELECT COUNT(*) AS cnt FROM follows WHERE following_id = ?').bind(userId).first() as any
+  const views60d = await db.prepare(`
+    SELECT COALESCE(SUM(rv.id),0) AS cnt FROM reel_views rv
+    JOIN reels r ON rv.reel_id = r.id
+    WHERE r.user_id = ? AND rv.viewed_at >= datetime('now', '-60 days')
+  `).bind(userId).first() as any
+  const reelsCount = await db.prepare('SELECT COUNT(*) AS cnt FROM reels WHERE user_id = ? AND status = "active"').bind(userId).first() as any
+
+  const followersCnt = followers?.cnt || 0
+  const viewsCnt = views60d?.cnt || 0
+  const reelsCnt = reelsCount?.cnt || 0
+
+  // Vérifier si le créateur existe dans la table
+  const existing = await db.prepare('SELECT id, status FROM creator_monetization WHERE user_id = ?').bind(userId).first() as any
+
+  if (!existing) {
+    await db.prepare(`
+      INSERT INTO creator_monetization (user_id, followers_count, views_last_60_days, reels_count, status)
+      VALUES (?, ?, ?, ?, 'not_eligible')
+    `).bind(userId, followersCnt, viewsCnt, reelsCnt).run()
+  } else {
+    // Déterminer le nouveau statut
+    let newStatus = existing.status
+    if (existing.status === 'not_eligible' || existing.status === 'eligible') {
+      if (followersCnt >= 3000 && viewsCnt >= 500000 && reelsCnt >= 1) {
+        newStatus = 'eligible'
+      } else {
+        newStatus = 'not_eligible'
+      }
+    }
+    await db.prepare(`
+      UPDATE creator_monetization SET
+        followers_count = ?, views_last_60_days = ?, reels_count = ?,
+        status = ?, last_stats_update = datetime('now')
+      WHERE user_id = ?
+    `).bind(followersCnt, viewsCnt, reelsCnt, newStatus, userId).run()
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── PAGE REELS ───────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/reels', authMiddleware, async (c) => {
+  const user = c.get('user')
+  const userId = c.get('userId')
+
+  // Reels recommandés : d'abord les créateurs suivis, puis les populaires
+  const reels = await c.env.DB.prepare(`
+    SELECT r.*, u.username, u.display_name, u.avatar_url,
+      (SELECT COUNT(*) FROM reel_likes rl WHERE rl.reel_id = r.id) AS likes_count,
+      (SELECT COUNT(*) FROM reel_comments rc WHERE rc.reel_id = r.id) AS comments_count,
+      (SELECT COUNT(*) FROM reel_likes rl2 WHERE rl2.reel_id = r.id AND rl2.user_id = ?) AS user_liked,
+      (SELECT COUNT(*) FROM follows f WHERE f.follower_id = ? AND f.following_id = r.user_id) AS is_following
+    FROM reels r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.status = 'active' AND r.privacy = 'public'
+    ORDER BY
+      CASE WHEN r.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?) THEN 0 ELSE 1 END,
+      (r.views_count * 0.3 + r.likes_count * 0.5 + r.shares_count * 0.2) DESC,
+      r.created_at DESC
+    LIMIT 30
+  `).bind(userId, userId, userId).all()
+
+  const reelCards = (reels.results as any[]).map((r, idx) => `
+<div class="reel-card" id="reel-${r.id}" data-reel-id="${r.id}">
+  <div class="reel-video-wrap">
+    <video
+      class="reel-video"
+      src="${r.video_url}"
+      poster="${r.thumbnail_url || ''}"
+      loop playsinline preload="${idx === 0 ? 'auto' : 'none'}"
+      onclick="toggleReelPlay(this)"
+    ></video>
+    <div class="reel-play-overlay" id="overlay-${r.id}">
+      <i class="fas fa-play"></i>
+    </div>
+    ${r.is_monetized ? '<div class="reel-monetized-badge"><i class="fas fa-dollar-sign"></i> Monétisé</div>' : ''}
+  </div>
+
+  <div class="reel-sidebar">
+    <a href="/profile/${r.username}" class="reel-avatar">
+      ${r.avatar_url
+        ? `<img src="${r.avatar_url}" class="avatar-md"/>`
+        : `<div class="avatar-md avatar-placeholder" style="background:${stringToColor(r.display_name)}">${r.display_name[0].toUpperCase()}</div>`}
+    </a>
+    <button class="reel-action-btn ${r.user_liked ? 'liked' : ''}" onclick="toggleReelLike(${r.id}, this)" title="J'aime">
+      <i class="${r.user_liked ? 'fas' : 'far'} fa-heart"></i>
+      <span class="reel-action-count" id="reel-likes-${r.id}">${r.likes_count}</span>
+    </button>
+    <button class="reel-action-btn" onclick="toggleReelComments(${r.id})" title="Commenter">
+      <i class="far fa-comment"></i>
+      <span class="reel-action-count">${r.comments_count}</span>
+    </button>
+    <button class="reel-action-btn" onclick="shareReel(${r.id})" title="Partager">
+      <i class="fas fa-share"></i>
+      <span class="reel-action-count">${r.shares_count}</span>
+    </button>
+    <button class="reel-action-btn" onclick="toggleFollow(${r.user_id}, this)" title="${r.is_following ? 'Ne plus suivre' : 'Suivre'}">
+      <i class="fas fa-${r.is_following ? 'user-check' : 'user-plus'}"></i>
+    </button>
+  </div>
+
+  <div class="reel-info">
+    <a href="/profile/${r.username}" class="reel-author">
+      <strong>${r.display_name}</strong>
+      <span class="reel-username">@${r.username}</span>
+    </a>
+    ${r.description ? `<p class="reel-description">${escapeHtml(r.description.substring(0, 100))}</p>` : ''}
+    <span class="reel-views"><i class="fas fa-eye"></i> ${formatCount(r.views_count)} vues</span>
+  </div>
+
+  <!-- Panel commentaires -->
+  <div class="reel-comments-panel hidden" id="reel-comments-panel-${r.id}">
+    <div class="reel-comments-header">
+      <span>Commentaires</span>
+      <button onclick="toggleReelComments(${r.id})"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="reel-comments-list" id="reel-comments-list-${r.id}"></div>
+    <form class="reel-comment-form" onsubmit="addReelComment(event, ${r.id})">
+      <input type="text" placeholder="Ajouter un commentaire…" class="reel-comment-input" required/>
+      <button type="submit"><i class="fas fa-paper-plane"></i></button>
+    </form>
+  </div>
+</div>`).join('')
+
+  const body = `
+<div class="reels-page">
+  <div class="reels-header">
+    <h1><i class="fas fa-film"></i> Reels</h1>
+    <a href="/reels/create" class="btn-primary btn-sm"><i class="fas fa-plus"></i> Créer un Reel</a>
+  </div>
+
+  <div class="reels-feed" id="reels-feed">
+    ${reelCards || `
+    <div class="empty-reels">
+      <i class="fas fa-film"></i>
+      <h2>Aucun Reel pour l'instant</h2>
+      <p>Soyez le premier à publier une vidéo courte !</p>
+      <a href="/reels/create" class="btn-primary"><i class="fas fa-plus"></i> Créer mon premier Reel</a>
+    </div>`}
+  </div>
+</div>
+<script>
+// Auto-play du premier reel
+document.addEventListener('DOMContentLoaded', () => {
+  const first = document.querySelector('.reel-video');
+  if (first) {
+    first.play().then(() => {
+      document.querySelector('.reel-play-overlay')?.classList.add('hidden');
+    }).catch(() => {});
+  }
+  // Intersection observer pour auto-play/pause
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const video = entry.target.querySelector('.reel-video');
+      const reelId = entry.target.dataset.reelId;
+      if (entry.isIntersecting) {
+        video?.play().catch(() => {});
+        entry.target.querySelector('.reel-play-overlay')?.classList.add('hidden');
+        // Compter la vue
+        if (reelId) countReelView(reelId);
+      } else {
+        video?.pause();
+      }
+    });
+  }, { threshold: 0.6 });
+  document.querySelectorAll('.reel-card').forEach(card => observer.observe(card));
+});
+</script>`
+
+  return c.html(layout('Reels', body, user))
+})
+
+// ─── PAGE CRÉER UN REEL ───────────────────────────────────────────────────────
+
+app.get('/reels/create', authMiddleware, async (c) => {
+  const user = c.get('user')
+  const body = `
+<div class="create-reel-container">
+  <div class="create-reel-header">
+    <a href="/reels" class="btn-icon"><i class="fas fa-arrow-left"></i></a>
+    <h1><i class="fas fa-film"></i> Créer un Reel</h1>
+  </div>
+
+  <div class="create-reel-card">
+    <div class="reel-preview-zone" id="reel-preview-zone">
+      <div class="reel-preview-placeholder" id="reel-placeholder">
+        <i class="fas fa-video"></i>
+        <p>Collez l'URL de votre vidéo</p>
+        <span>YouTube, TikTok, Streamable, ou lien direct .mp4</span>
+      </div>
+      <video id="reel-preview-video" class="reel-preview-video hidden" controls></video>
+    </div>
+
+    <form class="create-reel-form" onsubmit="publishReel(event)">
+      <div class="form-group">
+        <label><i class="fas fa-link"></i> URL de la vidéo *</label>
+        <input
+          type="url" id="reel-video-url" name="video_url"
+          placeholder="https://... (lien direct vers une vidéo .mp4 ou URL YouTube)"
+          class="form-input" required
+          oninput="previewReelVideo(this.value)"
+        />
+        <small class="form-hint">💡 Hébergez votre vidéo sur Streamable, Cloudinary, ou tout hébergeur de fichiers</small>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-image"></i> URL de la miniature (optionnel)</label>
+        <input type="url" id="reel-thumbnail" name="thumbnail_url" placeholder="https://... image de couverture" class="form-input"/>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-pen"></i> Description</label>
+        <textarea name="description" placeholder="Décrivez votre Reel, ajoutez des #hashtags…" class="form-input" rows="3" maxlength="500"></textarea>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label><i class="fas fa-clock"></i> Durée (secondes)</label>
+          <input type="number" name="duration" placeholder="Ex: 30" class="form-input" min="1" max="600"/>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-lock"></i> Visibilité</label>
+          <select name="privacy" class="form-input">
+            <option value="public">Public 🌍</option>
+            <option value="friends">Amis seulement 👥</option>
+            <option value="private">Privé 🔒</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="reel-tips">
+        <h4><i class="fas fa-lightbulb"></i> Conseils pour monétiser vos Reels</h4>
+        <ul>
+          <li>📱 Vidéo verticale 9:16 recommandée (comme TikTok/Reels Facebook)</li>
+          <li>⏱️ Durée idéale : 15 à 60 secondes</li>
+          <li>🎯 Contenu original = plus de vues = plus de revenus</li>
+          <li>🔥 Les 3 premières secondes sont cruciales pour retenir l'attention</li>
+          <li>💰 Objectif : 3 000 abonnés + 500 000 vues en 60 jours</li>
+        </ul>
+      </div>
+
+      <button type="submit" class="btn-primary btn-full">
+        <i class="fas fa-rocket"></i> Publier le Reel
+      </button>
+    </form>
+  </div>
+</div>
+<script>
+function previewReelVideo(url) {
+  const video = document.getElementById('reel-preview-video');
+  const placeholder = document.getElementById('reel-placeholder');
+  if (!url) { video.classList.add('hidden'); placeholder.classList.remove('hidden'); return; }
+  video.src = url;
+  video.classList.remove('hidden');
+  placeholder.classList.add('hidden');
+}
+
+async function publishReel(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = {
+    video_url: form.video_url.value.trim(),
+    thumbnail_url: form.thumbnail_url?.value?.trim() || '',
+    description: form.description.value.trim(),
+    duration_seconds: parseInt(form.duration.value) || 0,
+    privacy: form.privacy.value
+  };
+  const btn = form.querySelector('button[type=submit]');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publication…';
+  btn.disabled = true;
+  const res = await fetch('/api/reels', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  const result = await res.json();
+  if (result.success) {
+    window.location.href = '/reels';
+  } else {
+    alert('Erreur : ' + (result.error || 'Inconnue'));
+    btn.innerHTML = '<i class="fas fa-rocket"></i> Publier le Reel';
+    btn.disabled = false;
+  }
+}
+</script>`
+  return c.html(layout('Créer un Reel', body, user))
+})
+
+// ─── API REELS ────────────────────────────────────────────────────────────────
+
+app.post('/api/reels', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const { video_url, thumbnail_url, description, duration_seconds, privacy } = await c.req.json()
+  if (!video_url) return c.json({ error: 'URL vidéo requise' }, 400)
+
+  const r = await c.env.DB.prepare(`
+    INSERT INTO reels (user_id, video_url, thumbnail_url, description, duration_seconds, privacy)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(userId, video_url, thumbnail_url || '', description || '', duration_seconds || 0, privacy || 'public').run()
+
+  await updateCreatorStats(c.env.DB, userId)
+  return c.json({ success: true, id: r.meta.last_row_id })
+})
+
+// Vue sur un reel
+app.post('/api/reels/:id/view', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const reelId = c.req.param('id')
+  const { duration } = await c.req.json().catch(() => ({ duration: 0 }))
+
+  await c.env.DB.prepare(
+    'INSERT INTO reel_views (reel_id, viewer_id, watch_duration_seconds) VALUES (?, ?, ?)'
+  ).bind(reelId, userId, duration || 0).run()
+
+  await c.env.DB.prepare('UPDATE reels SET views_count = views_count + 1 WHERE id = ?').bind(reelId).run()
+
+  // Mettre à jour les stats créateur pour éligibilité monétisation
+  const reel = await c.env.DB.prepare('SELECT user_id FROM reels WHERE id = ?').bind(reelId).first() as any
+  if (reel) await updateCreatorStats(c.env.DB, reel.user_id)
+
+  // Calculer revenu estimé (25 XOF / 1000 vues) si créateur monétisé
+  await c.env.DB.prepare(`
+    UPDATE creator_monetization SET
+      total_earnings_xof = total_earnings_xof + (rpm_xof / 1000.0),
+      pending_payout_xof = pending_payout_xof + (rpm_xof / 1000.0)
+    WHERE user_id = ? AND status = 'active'
+  `).bind(reel?.user_id).run().catch(() => {})
+
+  return c.json({ ok: true })
+})
+
+// Like reel
+app.post('/api/reels/:id/like', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const reelId = c.req.param('id')
+  const existing = await c.env.DB.prepare('SELECT id FROM reel_likes WHERE reel_id = ? AND user_id = ?').bind(reelId, userId).first()
+  if (existing) {
+    await c.env.DB.prepare('DELETE FROM reel_likes WHERE reel_id = ? AND user_id = ?').bind(reelId, userId).run()
+    await c.env.DB.prepare('UPDATE reels SET likes_count = MAX(0, likes_count - 1) WHERE id = ?').bind(reelId).run()
+    const cnt = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM reel_likes WHERE reel_id = ?').bind(reelId).first() as any
+    return c.json({ liked: false, count: cnt?.cnt || 0 })
+  } else {
+    await c.env.DB.prepare('INSERT INTO reel_likes (reel_id, user_id) VALUES (?, ?)').bind(reelId, userId).run()
+    await c.env.DB.prepare('UPDATE reels SET likes_count = likes_count + 1 WHERE id = ?').bind(reelId).run()
+    const cnt = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM reel_likes WHERE reel_id = ?').bind(reelId).first() as any
+    return c.json({ liked: true, count: cnt?.cnt || 0 })
+  }
+})
+
+// Commentaires reel
+app.get('/api/reels/:id/comments', authMiddleware, async (c) => {
+  const reelId = c.req.param('id')
+  const comments = await c.env.DB.prepare(`
+    SELECT rc.*, u.username, u.display_name, u.avatar_url
+    FROM reel_comments rc JOIN users u ON rc.user_id = u.id
+    WHERE rc.reel_id = ? ORDER BY rc.created_at DESC LIMIT 30
+  `).bind(reelId).all()
+  return c.json({ comments: comments.results })
+})
+
+app.post('/api/reels/:id/comments', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const reelId = c.req.param('id')
+  const { content } = await c.req.json()
+  if (!content?.trim()) return c.json({ error: 'Commentaire vide' }, 400)
+  const r = await c.env.DB.prepare('INSERT INTO reel_comments (reel_id, user_id, content) VALUES (?, ?, ?)').bind(reelId, userId, content.trim()).run()
+  await c.env.DB.prepare('UPDATE reels SET comments_count = comments_count + 1 WHERE id = ?').bind(reelId).run()
+  const user = c.get('user')
+  return c.json({ id: r.meta.last_row_id, content: content.trim(), display_name: user.display_name, avatar_url: user.avatar_url, created_at: new Date().toISOString() })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── DASHBOARD MONÉTISATION CRÉATEUR ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/creator', authMiddleware, async (c) => {
+  const user = c.get('user')
+  const userId = c.get('userId')
+
+  // Mettre à jour les stats avant affichage
+  await updateCreatorStats(c.env.DB, userId)
+
+  const cm = await c.env.DB.prepare('SELECT * FROM creator_monetization WHERE user_id = ?').bind(userId).first() as any
+
+  // Créer l'entrée si elle n'existe pas
+  const stats = cm || {
+    status: 'not_eligible',
+    followers_count: 0,
+    views_last_60_days: 0,
+    reels_count: 0,
+    required_followers: 3000,
+    required_views_60d: 500000,
+    total_earnings_xof: 0,
+    pending_payout_xof: 0,
+    total_paid_xof: 0,
+    rpm_xof: 25
+  }
+
+  const followersCount = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM follows WHERE following_id = ?').bind(userId).first() as any
+  const reelsCount = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM reels WHERE user_id = ? AND status = "active"').bind(userId).first() as any
+  const views60d = await c.env.DB.prepare(`
+    SELECT COALESCE(COUNT(*), 0) AS cnt FROM reel_views rv
+    JOIN reels r ON rv.reel_id = r.id
+    WHERE r.user_id = ? AND rv.viewed_at >= datetime('now', '-60 days')
+  `).bind(userId).first() as any
+
+  const fCount = followersCount?.cnt || 0
+  const vCount = views60d?.cnt || 0
+  const rCount = reelsCount?.cnt || 0
+
+  // Calcul progression vers éligibilité
+  const followersPct = Math.min(100, Math.round((fCount / 3000) * 100))
+  const viewsPct = Math.min(100, Math.round((vCount / 500000) * 100))
+  const isEligible = fCount >= 3000 && vCount >= 500000 && rCount >= 1
+  const isActive = stats.status === 'active'
+
+  // Stats journalières 30 derniers jours
+  const dailyStats = await c.env.DB.prepare(`
+    SELECT stat_date, views, new_followers, estimated_earnings_xof
+    FROM creator_daily_stats
+    WHERE user_id = ? AND stat_date >= date('now', '-30 days')
+    ORDER BY stat_date ASC
+  `).bind(userId).all()
+
+  // Historique paiements
+  const payouts = await c.env.DB.prepare(`
+    SELECT * FROM creator_payouts WHERE user_id = ? ORDER BY created_at DESC LIMIT 10
+  `).bind(userId).all()
+
+  const statusBadge: Record<string, string> = {
+    'not_eligible': '<span class="status-badge status-grey">❌ Non éligible</span>',
+    'eligible': '<span class="status-badge status-yellow">⏳ Éligible – Candidature possible</span>',
+    'pending_review': '<span class="status-badge status-orange">🔍 En cours d\'examen</span>',
+    'active': '<span class="status-badge status-green">✅ Monétisation ACTIVE</span>',
+    'suspended': '<span class="status-badge status-red">🚫 Suspendu</span>'
+  }
+
+  const body = `
+<div class="creator-dashboard">
+
+  <!-- ── En-tête ── -->
+  <div class="creator-hero">
+    <div class="creator-hero-left">
+      ${avatarHtml(user, 'xl')}
+      <div>
+        <h1>${user.display_name}</h1>
+        <span class="creator-username">@${user.username}</span>
+        ${statusBadge[stats.status] || ''}
+      </div>
+    </div>
+    <a href="/reels/create" class="btn-primary">
+      <i class="fas fa-plus"></i> Nouveau Reel
+    </a>
+  </div>
+
+  <!-- ── Métriques clés ── -->
+  <div class="creator-metrics">
+    <div class="metric-card">
+      <div class="metric-icon"><i class="fas fa-users"></i></div>
+      <div class="metric-value">${formatNum(fCount)}</div>
+      <div class="metric-label">Abonnés</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-icon"><i class="fas fa-eye"></i></div>
+      <div class="metric-value">${formatNum(vCount)}</div>
+      <div class="metric-label">Vues (60 jours)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-icon"><i class="fas fa-film"></i></div>
+      <div class="metric-value">${rCount}</div>
+      <div class="metric-label">Reels publiés</div>
+    </div>
+    <div class="metric-card ${isActive ? 'metric-earnings' : ''}">
+      <div class="metric-icon"><i class="fas fa-coins"></i></div>
+      <div class="metric-value">${isActive ? formatNum(Math.round(stats.total_earnings_xof)) + ' XOF' : '–'}</div>
+      <div class="metric-label">Revenus totaux</div>
+    </div>
+  </div>
+
+  <!-- ── Progression éligibilité ── -->
+  <div class="eligibility-card">
+    <div class="eligibility-header">
+      <h2><i class="fas fa-trophy"></i> Programme de Monétisation</h2>
+      ${isEligible && !isActive
+        ? `<button class="btn-primary" onclick="applyMonetization()"><i class="fas fa-paper-plane"></i> Postuler maintenant</button>`
+        : isActive
+        ? `<button class="btn-success" onclick="requestPayout()"><i class="fas fa-wallet"></i> Demander un paiement</button>`
+        : ''}
+    </div>
+
+    <div class="eligibility-criteria">
+      <!-- Critère 1 : Abonnés -->
+      <div class="criterion ${fCount >= 3000 ? 'criterion-met' : ''}">
+        <div class="criterion-header">
+          <div class="criterion-title">
+            <i class="fas ${fCount >= 3000 ? 'fa-check-circle' : 'fa-circle'}"></i>
+            <span>Abonnés</span>
+          </div>
+          <span class="criterion-count">${formatNum(fCount)} / 3 000</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill ${fCount >= 3000 ? 'progress-complete' : ''}"
+               style="width:${followersPct}%"></div>
+        </div>
+        <span class="criterion-hint">
+          ${fCount >= 3000
+            ? '✅ Critère atteint !'
+            : `Encore ${formatNum(3000 - fCount)} abonnés nécessaires`}
+        </span>
+      </div>
+
+      <!-- Critère 2 : Vues 60 jours -->
+      <div class="criterion ${vCount >= 500000 ? 'criterion-met' : ''}">
+        <div class="criterion-header">
+          <div class="criterion-title">
+            <i class="fas ${vCount >= 500000 ? 'fa-check-circle' : 'fa-circle'}"></i>
+            <span>Vues de Reels (60 derniers jours)</span>
+          </div>
+          <span class="criterion-count">${formatNum(vCount)} / 500 000</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill ${vCount >= 500000 ? 'progress-complete' : ''}"
+               style="width:${viewsPct}%"></div>
+        </div>
+        <span class="criterion-hint">
+          ${vCount >= 500000
+            ? '✅ Critère atteint !'
+            : `Encore ${formatNum(500000 - vCount)} vues nécessaires en 60 jours`}
+        </span>
+      </div>
+
+      <!-- Critère 3 : Reels publiés -->
+      <div class="criterion ${rCount >= 1 ? 'criterion-met' : ''}">
+        <div class="criterion-header">
+          <div class="criterion-title">
+            <i class="fas ${rCount >= 1 ? 'fa-check-circle' : 'fa-circle'}"></i>
+            <span>Au moins 1 Reel publié</span>
+          </div>
+          <span class="criterion-count">${rCount} Reel${rCount > 1 ? 's' : ''}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill ${rCount >= 1 ? 'progress-complete' : ''}"
+               style="width:${Math.min(100, rCount * 100)}%"></div>
+        </div>
+        <span class="criterion-hint">
+          ${rCount >= 1 ? '✅ Critère atteint !' : 'Publiez votre premier Reel'}
+        </span>
+      </div>
+    </div>
+
+    ${isEligible ? `
+    <div class="eligibility-ready">
+      <i class="fas fa-star"></i>
+      <div>
+        <h3>🎉 Vous êtes éligible à la monétisation !</h3>
+        <p>Tous les critères sont atteints. Postulez pour commencer à gagner de l'argent avec vos Reels.</p>
+      </div>
+    </div>` : `
+    <div class="eligibility-tips">
+      <h4><i class="fas fa-lightbulb"></i> Comment atteindre l'éligibilité plus vite ?</h4>
+      <div class="tips-grid">
+        <div class="tip"><i class="fas fa-clock"></i><span>Publiez 1 à 3 Reels par jour</span></div>
+        <div class="tip"><i class="fas fa-hashtag"></i><span>Utilisez des hashtags tendance</span></div>
+        <div class="tip"><i class="fas fa-share-alt"></i><span>Partagez sur d'autres réseaux</span></div>
+        <div class="tip"><i class="fas fa-comments"></i><span>Répondez aux commentaires</span></div>
+        <div class="tip"><i class="fas fa-fire"></i><span>Contenu viral = explosion des vues</span></div>
+        <div class="tip"><i class="fas fa-calendar"></i><span>Publiez aux heures de pointe (18h–22h)</span></div>
+      </div>
+    </div>`}
+  </div>
+
+  ${isActive ? `
+  <!-- ── Revenus & Paiements ── -->
+  <div class="earnings-section">
+    <h2><i class="fas fa-wallet"></i> Revenus & Paiements</h2>
+    <div class="earnings-grid">
+      <div class="earnings-card">
+        <span class="earnings-label">Solde disponible</span>
+        <span class="earnings-amount">${Math.round(stats.pending_payout_xof).toLocaleString()} XOF</span>
+        <button class="btn-primary btn-sm" onclick="requestPayout()"><i class="fas fa-paper-plane"></i> Retirer</button>
+      </div>
+      <div class="earnings-card">
+        <span class="earnings-label">Total gagné</span>
+        <span class="earnings-amount">${Math.round(stats.total_earnings_xof).toLocaleString()} XOF</span>
+      </div>
+      <div class="earnings-card">
+        <span class="earnings-label">Déjà payé</span>
+        <span class="earnings-amount">${Math.round(stats.total_paid_xof).toLocaleString()} XOF</span>
+      </div>
+      <div class="earnings-card">
+        <span class="earnings-label">Taux (RPM)</span>
+        <span class="earnings-amount">${stats.rpm_xof} XOF<small>/1000 vues</small></span>
+      </div>
+    </div>
+
+    <div class="payout-history">
+      <h3>Historique des paiements</h3>
+      ${(payouts.results as any[]).length > 0 ? `
+      <table class="payout-table">
+        <thead><tr><th>Date</th><th>Montant</th><th>Méthode</th><th>Statut</th><th>Référence</th></tr></thead>
+        <tbody>
+          ${(payouts.results as any[]).map(p => `
+          <tr>
+            <td>${new Date(p.created_at).toLocaleDateString('fr-FR')}</td>
+            <td><strong>${Math.round(p.amount_xof).toLocaleString()} XOF</strong></td>
+            <td>${p.payment_method}</td>
+            <td><span class="payout-status payout-${p.status}">${p.status}</span></td>
+            <td><code>${p.reference}</code></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<p class="empty-result">Aucun paiement pour l\'instant.</p>'}
+    </div>
+  </div>` : ''}
+
+  <!-- ── Mes Reels ── -->
+  <div class="my-reels-section">
+    <div class="section-header">
+      <h2><i class="fas fa-film"></i> Mes Reels</h2>
+      <a href="/reels/create" class="btn-secondary btn-sm"><i class="fas fa-plus"></i> Nouveau</a>
+    </div>
+    <div id="my-reels-list" class="my-reels-grid">
+      <div class="loading"><i class="fas fa-spinner fa-spin"></i></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal candidature monétisation -->
+<div class="modal-overlay hidden" id="apply-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3><i class="fas fa-crown"></i> Activer la monétisation</h3>
+      <button onclick="closeApplyModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <p style="margin-bottom:16px;color:var(--text-secondary)">Choisissez votre méthode de paiement pour recevoir vos revenus.</p>
+    <select id="apply-method" class="form-input" style="margin-bottom:12px">
+      <option value="orange_money">Orange Money</option>
+      <option value="wave">Wave</option>
+      <option value="mtn">MTN Mobile Money</option>
+      <option value="free_money">Free Money</option>
+    </select>
+    <input type="tel" id="apply-phone" placeholder="Numéro de téléphone" class="form-input" style="margin-bottom:16px"/>
+    <button class="btn-primary btn-full" onclick="confirmApplyMonetization()">
+      <i class="fas fa-check"></i> Confirmer et activer
+    </button>
+  </div>
+</div>
+
+<!-- Modal retrait -->
+<div class="modal-overlay hidden" id="payout-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3><i class="fas fa-wallet"></i> Retirer mes revenus</h3>
+      <button onclick="closePayoutModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="payout-balance" style="background:var(--bg);padding:16px;border-radius:8px;margin-bottom:16px;font-size:18px;text-align:center;font-weight:700;"></div>
+    <select id="payout-method" class="form-input" style="margin-bottom:12px">
+      <option value="orange_money">Orange Money</option>
+      <option value="wave">Wave</option>
+      <option value="mtn">MTN Mobile Money</option>
+    </select>
+    <input type="tel" id="payout-phone" placeholder="Numéro de réception" class="form-input" style="margin-bottom:16px"/>
+    <button class="btn-primary btn-full" onclick="confirmPayout()">
+      <i class="fas fa-paper-plane"></i> Envoyer
+    </button>
+  </div>
+</div>
+
+<script>
+// Charger mes reels
+fetch('/api/reels/mine').then(r=>r.json()).then(data => {
+  const el = document.getElementById('my-reels-list');
+  if (!el) return;
+  if (!data.reels?.length) { el.innerHTML = '<p class="empty-result">Aucun Reel publié. <a href="/reels/create">Créez votre premier !</a></p>'; return; }
+  el.innerHTML = data.reels.map(r => \`
+    <div class="my-reel-thumb">
+      <div class="my-reel-img" style="background:#000;position:relative">
+        \${r.thumbnail_url ? \`<img src="\${r.thumbnail_url}" style="width:100%;height:100%;object-fit:cover"/>\` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px"><i class="fas fa-film"></i></div>'}
+        <div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.7);color:white;font-size:11px;padding:2px 6px;border-radius:4px">
+          <i class="fas fa-eye"></i> \${r.views_count}
+        </div>
+        \${r.is_monetized ? '<div style="position:absolute;top:4px;left:4px;background:#f7b928;color:#000;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700">💰 Monétisé</div>' : ''}
+      </div>
+      <div class="my-reel-info">
+        <span class="my-reel-views"><i class="fas fa-eye"></i> \${r.views_count}</span>
+        <span><i class="fas fa-heart"></i> \${r.likes_count}</span>
+      </div>
+    </div>
+  \`).join('');
+});
+
+function applyMonetization() { document.getElementById('apply-modal').classList.remove('hidden'); }
+function closeApplyModal() { document.getElementById('apply-modal').classList.add('hidden'); }
+
+async function confirmApplyMonetization() {
+  const method = document.getElementById('apply-method').value;
+  const phone = document.getElementById('apply-phone').value.trim();
+  if (!phone) { alert('Numéro requis'); return; }
+  const res = await fetch('/api/creator/apply', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ payment_method: method, payment_phone: phone })
+  });
+  const data = await res.json();
+  if (data.success) { alert('✅ ' + data.message); location.reload(); }
+  else alert('❌ ' + data.error);
+}
+
+function requestPayout() {
+  const balance = ${isActive ? Math.round(stats.pending_payout_xof) : 0};
+  document.getElementById('payout-balance').innerHTML = 'Solde disponible : <strong>' + balance.toLocaleString() + ' XOF</strong>';
+  document.getElementById('payout-modal').classList.remove('hidden');
+}
+function closePayoutModal() { document.getElementById('payout-modal').classList.add('hidden'); }
+
+async function confirmPayout() {
+  const method = document.getElementById('payout-method').value;
+  const phone = document.getElementById('payout-phone').value.trim();
+  if (!phone) { alert('Numéro requis'); return; }
+  const res = await fetch('/api/creator/payout', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ payment_method: method, payment_phone: phone })
+  });
+  const data = await res.json();
+  if (data.success) { alert('✅ ' + data.message); location.reload(); }
+  else alert('❌ ' + data.error);
+}
+</script>`
+
+  return c.html(layout('Dashboard Créateur', body, user))
+})
+
+// ─── API CRÉATEUR : Mes reels ─────────────────────────────────────────────────
+app.get('/api/reels/mine', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const reels = await c.env.DB.prepare(`
+    SELECT id, video_url, thumbnail_url, description, views_count, likes_count,
+           comments_count, is_monetized, created_at
+    FROM reels WHERE user_id = ? AND status = 'active'
+    ORDER BY created_at DESC LIMIT 50
+  `).bind(userId).all()
+  return c.json({ reels: reels.results })
+})
+
+// ─── API CRÉATEUR : Candidature monétisation ──────────────────────────────────
+app.post('/api/creator/apply', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const { payment_method, payment_phone } = await c.req.json()
+
+  await updateCreatorStats(c.env.DB, userId)
+  const cm = await c.env.DB.prepare('SELECT * FROM creator_monetization WHERE user_id = ?').bind(userId).first() as any
+
+  if (!cm || (cm.followers_count < 3000 || cm.views_last_60_days < 500000)) {
+    return c.json({ error: 'Vous ne remplissez pas encore tous les critères d\'éligibilité.' }, 400)
+  }
+
+  if (cm.status === 'active') return c.json({ error: 'Votre monétisation est déjà active.' }, 400)
+
+  await c.env.DB.prepare(`
+    UPDATE creator_monetization SET
+      status = 'active',
+      payment_method = ?,
+      payment_phone = ?,
+      approved_at = datetime('now'),
+      applied_at = datetime('now'),
+      next_payout_date = datetime('now', '+30 days')
+    WHERE user_id = ?
+  `).bind(payment_method, payment_phone, userId).run()
+
+  // Marquer les reels existants comme monétisés
+  await c.env.DB.prepare('UPDATE reels SET is_monetized = 1 WHERE user_id = ? AND status = "active"').bind(userId).run()
+
+  return c.json({ success: true, message: 'Félicitations ! Votre monétisation est maintenant active. Vos Reels rapportent 25 XOF par 1000 vues.' })
+})
+
+// ─── API CRÉATEUR : Demande de paiement ───────────────────────────────────────
+app.post('/api/creator/payout', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const { payment_method, payment_phone } = await c.req.json()
+
+  const cm = await c.env.DB.prepare('SELECT * FROM creator_monetization WHERE user_id = ? AND status = "active"').bind(userId).first() as any
+  if (!cm) return c.json({ error: 'Monétisation non active' }, 400)
+  if (cm.pending_payout_xof < 5000) return c.json({ error: `Solde insuffisant. Minimum de retrait : 5 000 XOF (vous avez ${Math.round(cm.pending_payout_xof)} XOF)` }, 400)
+
+  const ref = 'PAYOUT-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7).toUpperCase()
+  const amount = cm.pending_payout_xof
+
+  await c.env.DB.prepare(`
+    INSERT INTO creator_payouts (user_id, amount_xof, payment_method, payment_phone, reference, status, views_count)
+    VALUES (?, ?, ?, ?, ?, 'processing', ?)
+  `).bind(userId, amount, payment_method, payment_phone, ref, cm.views_last_60_days).run()
+
+  await c.env.DB.prepare(`
+    UPDATE creator_monetization SET
+      pending_payout_xof = 0,
+      total_paid_xof = total_paid_xof + ?,
+      last_payout_at = datetime('now'),
+      next_payout_date = datetime('now', '+30 days')
+    WHERE user_id = ?
+  `).bind(amount, userId).run()
+
+  return c.json({
+    success: true,
+    message: `Paiement de ${Math.round(amount).toLocaleString()} XOF en cours de traitement vers votre ${payment_method}. Référence : ${ref}`
+  })
+})
+
+// ─── API : Vérifier l'éligibilité (endpoint rapide) ──────────────────────────
+app.get('/api/creator/eligibility', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  await updateCreatorStats(c.env.DB, userId)
+  const cm = await c.env.DB.prepare('SELECT * FROM creator_monetization WHERE user_id = ?').bind(userId).first() as any
+  if (!cm) return c.json({ eligible: false, followers: 0, views: 0, reels: 0 })
+  return c.json({
+    eligible: cm.status === 'eligible' || cm.status === 'active',
+    active: cm.status === 'active',
+    status: cm.status,
+    followers: cm.followers_count,
+    views: cm.views_last_60_days,
+    reels: cm.reels_count,
+    earnings: cm.total_earnings_xof,
+    pending: cm.pending_payout_xof
+  })
+})
+
+// Helper formatage
+function formatNum(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+  return String(n)
+}
+
+function formatCount(n: number): string { return formatNum(n) }
 
 export default app

@@ -801,3 +801,134 @@ async function updateMsgCount() {
     // TODO: ajouter endpoint messages non lus
   } catch {}
 }
+
+// ═══════════════════════════════════════════════════
+// REELS – INTERACTIONS
+// ═══════════════════════════════════════════════════
+
+function toggleReelPlay(video) {
+  const card = video.closest('.reel-card');
+  const overlay = card?.querySelector('.reel-play-overlay');
+  if (video.paused) {
+    video.play();
+    overlay?.classList.add('hidden');
+  } else {
+    video.pause();
+    overlay?.classList.remove('hidden');
+  }
+}
+
+async function countReelView(reelId) {
+  try {
+    await fetch(`/api/reels/${reelId}/view`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration: 5 })
+    });
+  } catch {}
+}
+
+async function toggleReelLike(reelId, btn) {
+  try {
+    const res = await fetch(`/api/reels/${reelId}/like`, { method: 'POST' });
+    const data = await res.json();
+    const countEl = document.getElementById(`reel-likes-${reelId}`);
+    if (countEl) countEl.textContent = data.count;
+    const icon = btn.querySelector('i');
+    if (data.liked) {
+      btn.classList.add('liked');
+      icon.className = 'fas fa-heart';
+    } else {
+      btn.classList.remove('liked');
+      icon.className = 'far fa-heart';
+    }
+    // Animation
+    btn.style.transform = 'scale(1.4)';
+    setTimeout(() => btn.style.transform = '', 200);
+  } catch (e) { console.error(e); }
+}
+
+async function toggleReelComments(reelId) {
+  const panel = document.getElementById(`reel-comments-panel-${reelId}`);
+  if (!panel) return;
+  if (panel.classList.contains('hidden')) {
+    panel.classList.remove('hidden');
+    // Charger les commentaires
+    const res = await fetch(`/api/reels/${reelId}/comments`);
+    const data = await res.json();
+    const list = document.getElementById(`reel-comments-list-${reelId}`);
+    if (list) {
+      list.innerHTML = data.comments.length
+        ? data.comments.map(c => `
+          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-start">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">
+              ${c.display_name[0].toUpperCase()}
+            </div>
+            <div>
+              <strong style="font-size:13px">${c.display_name}</strong>
+              <p style="font-size:14px;margin-top:2px">${c.content}</p>
+            </div>
+          </div>`).join('')
+        : '<p style="text-align:center;color:var(--text-secondary);padding:20px">Aucun commentaire. Soyez le premier !</p>';
+    }
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+async function addReelComment(e, reelId) {
+  e.preventDefault();
+  const input = e.target.querySelector('input');
+  const content = input.value.trim();
+  if (!content) return;
+  input.value = '';
+  const res = await fetch(`/api/reels/${reelId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content })
+  });
+  const data = await res.json();
+  if (data.id) {
+    const list = document.getElementById(`reel-comments-list-${reelId}`);
+    if (list) {
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;align-items:flex-start';
+      div.innerHTML = `
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">
+          ${data.display_name[0].toUpperCase()}
+        </div>
+        <div>
+          <strong style="font-size:13px">${data.display_name}</strong>
+          <p style="font-size:14px;margin-top:2px">${content}</p>
+        </div>`;
+      list.prepend(div);
+    }
+  }
+}
+
+async function shareReel(reelId) {
+  const url = `${window.location.origin}/reels#reel-${reelId}`;
+  if (navigator.share) {
+    navigator.share({ title: 'SocialFeed Reel', url }).catch(() => {});
+  } else {
+    await navigator.clipboard.writeText(url);
+    showToast('🔗 Lien copié !', 'info');
+  }
+  // Incrémenter le compteur de partages
+  fetch(`/api/reels/${reelId}/share`, { method: 'POST' }).catch(() => {});
+}
+
+async function toggleFollow(userId, btn) {
+  try {
+    const res = await fetch(`/api/follow/${userId}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.following) {
+      btn.innerHTML = '<i class="fas fa-user-check"></i>';
+      btn.title = 'Ne plus suivre';
+    } else {
+      btn.innerHTML = '<i class="fas fa-user-plus"></i>';
+      btn.title = 'Suivre';
+    }
+    showToast(data.following ? '✅ Vous suivez maintenant ce créateur' : 'Vous ne suivez plus ce créateur', 'info');
+  } catch {}
+}
