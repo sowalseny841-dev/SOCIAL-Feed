@@ -123,9 +123,21 @@ jobs:
             <foreground android:drawable="@drawable/ic_notification"/>
           </adaptive-icon>'''
 
+          # Simple PNG-like launcher for non-v26 (just a solid color shape)
+          simple_launcher = '''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="oval">
+            <solid android:color="#1877F2"/>
+          </shape>'''
+
           for density in ["hdpi","mdpi","xhdpi","xxhdpi","xxxhdpi"]:
-              files[f"{base}/mipmap-{density}/ic_launcher.xml"] = launcher_xml
-              files[f"{base}/mipmap-{density}/ic_launcher_round.xml"] = launcher_xml
+              # Normal mipmap - use simple shape (no adaptive-icon)
+              files[f"{base}/mipmap-{density}/ic_launcher.xml"] = simple_launcher
+              files[f"{base}/mipmap-{density}/ic_launcher_round.xml"] = simple_launcher
+              # v26+ mipmap - can use adaptive-icon
+              os.makedirs(f"{base}/mipmap-{density}-v26", exist_ok=True)
+              files[f"{base}/mipmap-{density}-v26/ic_launcher.xml"] = launcher_xml
+              files[f"{base}/mipmap-{density}-v26/ic_launcher_round.xml"] = launcher_xml
 
           for path, content in files.items():
               with open(path, 'w') as f:
