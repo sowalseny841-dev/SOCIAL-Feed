@@ -1,4 +1,4 @@
-name: 🚀 Build APK SocialFeed
+name: Build APK SocialFeed
 
 on:
   push:
@@ -7,232 +7,188 @@ on:
 
 jobs:
   build:
-    name: Build APK & AAB
+    name: Build APK and AAB
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Récupérer le code ─────────────────────────────────────────────
-      - name: 📥 Checkout du code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Configurer Java 17 ────────────────────────────────────────────
-      - name: ☕ Configurer JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
 
-      # ── 3. Générer gradlew si absent ─────────────────────────────────────
-      - name: ⚙️ Créer Gradle Wrapper
+      - name: Create Gradle Wrapper
         working-directory: android-app
         run: |
           if [ ! -f gradlew ]; then
-            echo "gradlew absent, génération via gradle..."
-            # Installer gradle via sdkman ou télécharger directement
+            echo "Downloading Gradle 8.4..."
             wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
             /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version=8.4
-            echo "gradlew généré avec succès"
-          else
-            echo "gradlew déjà présent"
           fi
           chmod +x gradlew
+          echo "gradlew ready"
 
-      # ── 4. Décoder le Keystore depuis les secrets GitHub ─────────────────
-      - name: 🔑 Décoder le Keystore
+      - name: Decode Keystore
         run: |
           mkdir -p android-app/keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-app/keystore/socialfeed-release.jks
-          ls -la android-app/keystore/
 
-      # ── 5. Créer le google-services.json depuis les secrets ───────────────
-      - name: 🔥 Créer google-services.json
+      - name: Create google-services.json
         run: |
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android-app/app/google-services.json
-          echo "google-services.json créé"
 
-      # ── 6. Créer les ressources manquantes ────────────────────────────────
-      - name: 🎨 Créer ressources
+      - name: Create Android resources
         run: |
-          mkdir -p android-app/app/src/main/res/drawable
-          mkdir -p android-app/app/src/main/res/mipmap-hdpi
-          mkdir -p android-app/app/src/main/res/mipmap-mdpi
-          mkdir -p android-app/app/src/main/res/mipmap-xhdpi
-          mkdir -p android-app/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android-app/app/src/main/res/mipmap-xxxhdpi
-          mkdir -p android-app/app/src/main/res/values
+          python3 << 'PYEOF'
+          import os
 
-          # ic_notification
-          cat > android-app/app/src/main/res/drawable/ic_notification.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-  <path android:fillColor="#FFFFFF"
-      android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"/>
-</vector>
-XMLEOF
+          base = "android-app/app/src/main/res"
+          dirs = [
+            f"{base}/drawable",
+            f"{base}/mipmap-hdpi", f"{base}/mipmap-mdpi",
+            f"{base}/mipmap-xhdpi", f"{base}/mipmap-xxhdpi", f"{base}/mipmap-xxxhdpi",
+            f"{base}/values"
+          ]
+          for d in dirs:
+              os.makedirs(d, exist_ok=True)
 
-          # ic_default_avatar
-          cat > android-app/app/src/main/res/drawable/ic_default_avatar.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="44dp" android:height="44dp"
-    android:viewportWidth="44" android:viewportHeight="44">
-  <path android:fillColor="#1877F2"
-      android:pathData="M22,22m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
-  <path android:fillColor="#FFFFFF"
-      android:pathData="M22,12a6,6 0,1 0,0 12a6,6 0,0 0,0 -12zM10,30c0,-4 5.4,-7 12,-7s12,3 12,7v2H10v-2z"/>
-</vector>
-XMLEOF
+          files = {
+            f"{base}/drawable/ic_notification.xml": '''<?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp" android:height="24dp"
+              android:viewportWidth="24" android:viewportHeight="24">
+            <path android:fillColor="#FFFFFF"
+                android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07-1.64,-5.64-4.5,-6.32V4c0,-0.83-0.67,-1.5-1.5,-1.5s-1.5,0.67-1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"/>
+          </vector>''',
+            f"{base}/drawable/ic_default_avatar.xml": '''<?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="44dp" android:height="44dp"
+              android:viewportWidth="44" android:viewportHeight="44">
+            <path android:fillColor="#1877F2" android:pathData="M22,22m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
+            <path android:fillColor="#FFFFFF" android:pathData="M22,12a6,6 0,1 0,0 12a6,6 0,0 0,0-12zM10,30c0,-4 5.4,-7 12,-7s12,3 12,7v2H10v-2z"/>
+          </vector>''',
+            f"{base}/drawable/bg_card.xml": '''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#FFFFFF"/>
+            <corners android:radius="12dp"/>
+            <stroke android:width="1dp" android:color="#E4E6EB"/>
+          </shape>''',
+            f"{base}/drawable/bg_input_rounded.xml": '''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#F0F2F5"/>
+            <corners android:radius="24dp"/>
+          </shape>''',
+            f"{base}/drawable/bg_btn_circle.xml": '''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+            <solid android:color="#1877F2"/>
+          </shape>''',
+            f"{base}/values/colors.xml": '''<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="primary">#1877F2</color>
+              <color name="primaryDark">#166FE5</color>
+              <color name="accent">#42B72A</color>
+              <color name="background">#F0F2F5</color>
+              <color name="white">#FFFFFF</color>
+              <color name="text">#1C1E21</color>
+              <color name="textSecondary">#65676B</color>
+          </resources>''',
+          }
 
-          # bg_card
-          cat > android-app/app/src/main/res/drawable/bg_card.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-  <solid android:color="#FFFFFF"/>
-  <corners android:radius="12dp"/>
-  <stroke android:width="1dp" android:color="#E4E6EB"/>
-</shape>
-XMLEOF
+          launcher_xml = '''<?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+            <background android:drawable="@color/primary"/>
+            <foreground android:drawable="@drawable/ic_notification"/>
+          </adaptive-icon>'''
 
-          # bg_input_rounded
-          cat > android-app/app/src/main/res/drawable/bg_input_rounded.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-  <solid android:color="#F0F2F5"/>
-  <corners android:radius="24dp"/>
-</shape>
-XMLEOF
+          for density in ["hdpi","mdpi","xhdpi","xxhdpi","xxxhdpi"]:
+              files[f"{base}/mipmap-{density}/ic_launcher.xml"] = launcher_xml
+              files[f"{base}/mipmap-{density}/ic_launcher_round.xml"] = launcher_xml
 
-          # bg_btn_circle
-          cat > android-app/app/src/main/res/drawable/bg_btn_circle.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-  <solid android:color="#1877F2"/>
-</shape>
-XMLEOF
+          for path, content in files.items():
+              with open(path, 'w') as f:
+                  f.write(content)
 
-          # ic_launcher (adaptive icon)
-          cat > android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <background android:drawable="@color/primary"/>
-  <foreground android:drawable="@drawable/ic_notification"/>
-</adaptive-icon>
-XMLEOF
+          print("Resources created successfully")
+          PYEOF
 
-          # Copier ic_launcher pour toutes les densités
-          for density in mdpi xhdpi xxhdpi xxxhdpi; do
-            cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml \
-               android-app/app/src/main/res/mipmap-${density}/ic_launcher.xml
-            cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml \
-               android-app/app/src/main/res/mipmap-${density}/ic_launcher_round.xml
-          done
-          cp android-app/app/src/main/res/mipmap-hdpi/ic_launcher.xml \
-             android-app/app/src/main/res/mipmap-hdpi/ic_launcher_round.xml
-
-          # Couleurs
-          cat > android-app/app/src/main/res/values/colors.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="primary">#1877F2</color>
-    <color name="primaryDark">#166FE5</color>
-    <color name="accent">#42B72A</color>
-    <color name="background">#F0F2F5</color>
-    <color name="white">#FFFFFF</color>
-    <color name="text">#1C1E21</color>
-    <color name="textSecondary">#65676B</color>
-</resources>
-XMLEOF
-          echo "Ressources créées ✅"
-
-      # ── 7. Créer le module DI Hilt ────────────────────────────────────────
-      - name: 🏗️ Créer module Hilt
+      - name: Create Hilt module
         run: |
           mkdir -p android-app/app/src/main/java/com/socialfeed/app/di
           mkdir -p android-app/app/src/main/java/com/socialfeed/app/services
 
-          cat > android-app/app/src/main/java/com/socialfeed/app/di/AppModule.kt << 'KTEOF'
-package com.socialfeed.app.di
+          python3 -c "
+          content = '''package com.socialfeed.app.di
 
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
-import dagger.Module
-import dagger.Provides
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
+          import com.google.firebase.auth.FirebaseAuth
+          import com.google.firebase.firestore.FirebaseFirestore
+          import com.google.firebase.storage.FirebaseStorage
+          import dagger.Module
+          import dagger.Provides
+          import dagger.hilt.InstallIn
+          import dagger.hilt.components.SingletonComponent
+          import javax.inject.Singleton
 
-@Module
-@InstallIn(SingletonComponent::class)
-object AppModule {
-    @Provides @Singleton
-    fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
+          @Module
+          @InstallIn(SingletonComponent::class)
+          object AppModule {
+              @Provides @Singleton
+              fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
+              @Provides @Singleton
+              fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+              @Provides @Singleton
+              fun provideStorage(): FirebaseStorage = FirebaseStorage.getInstance()
+          }'''
+          with open('android-app/app/src/main/java/com/socialfeed/app/di/AppModule.kt','w') as f:
+              f.write(content)
+          print('AppModule created')
+          "
 
-    @Provides @Singleton
-    fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+          python3 -c "
+          content = '''package com.socialfeed.app.services
 
-    @Provides @Singleton
-    fun provideStorage(): FirebaseStorage = FirebaseStorage.getInstance()
-}
-KTEOF
+          import com.google.firebase.messaging.FirebaseMessagingService
+          import com.google.firebase.messaging.RemoteMessage
+          import com.google.firebase.auth.FirebaseAuth
+          import com.google.firebase.firestore.FirebaseFirestore
 
-          cat > android-app/app/src/main/java/com/socialfeed/app/services/FCMService.kt << 'KTEOF'
-package com.socialfeed.app.services
+          class FCMService : FirebaseMessagingService() {
+              override fun onNewToken(token: String) {
+                  val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+                  FirebaseFirestore.getInstance().collection(\"users\").document(uid).update(\"fcmToken\", token)
+              }
+              override fun onMessageReceived(message: RemoteMessage) {}
+          }'''
+          with open('android-app/app/src/main/java/com/socialfeed/app/services/FCMService.kt','w') as f:
+              f.write(content)
+          print('FCMService created')
+          "
 
-import com.google.firebase.messaging.FirebaseMessagingService
-import com.google.firebase.messaging.RemoteMessage
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-
-class FCMService : FirebaseMessagingService() {
-    override fun onNewToken(token: String) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        FirebaseFirestore.getInstance().collection("users")
-            .document(uid).update("fcmToken", token)
-    }
-    override fun onMessageReceived(message: RemoteMessage) {}
-}
-KTEOF
-
-          cat > android-app/app/proguard-rules.pro << 'PGEOF'
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--keep class com.socialfeed.app.** { *; }
--keepattributes Signature
--keepattributes *Annotation*
--dontwarn com.google.firebase.**
-PGEOF
-          echo "Module Hilt créé ✅"
-
-      # ── 8. Build APK Debug ────────────────────────────────────────────────
-      - name: 🔨 Build APK Debug
+      - name: Build Debug APK
         working-directory: android-app
+        env:
+          GRADLE_OPTS: "-Xmx4g -Dorg.gradle.daemon=false"
+          KEYSTORE_PATH: keystore/socialfeed-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: socialfeed
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleDebug --no-daemon --stacktrace
-        env:
-          GRADLE_OPTS: "-Xmx4g -Dorg.gradle.daemon=false"
-          KEYSTORE_PATH: keystore/socialfeed-release.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: socialfeed
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      # ── 9. Build AAB Release (Play Store) ────────────────────────────────
-      - name: 📦 Build AAB Release
+      - name: Build Release AAB
         working-directory: android-app
-        run: ./gradlew bundleRelease --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Xmx4g -Dorg.gradle.daemon=false"
           KEYSTORE_PATH: keystore/socialfeed-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
 
-      # ── 10. Upload artifacts ──────────────────────────────────────────────
-      - name: 💾 Sauvegarder APK Debug
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -240,7 +196,7 @@ PGEOF
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      - name: 💾 Sauvegarder AAB Release
+      - name: Upload Release AAB
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -248,11 +204,10 @@ PGEOF
           path: android-app/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
-      # ── 11. Résumé ────────────────────────────────────────────────────────
-      - name: ✅ Résumé du build
+      - name: Build Summary
         if: success()
         run: |
-          echo "🎉 BUILD RÉUSSI !"
-          echo "📱 APK Debug     : app/build/outputs/apk/debug/app-debug.apk"
-          echo "📦 AAB Release   : app/build/outputs/bundle/release/app-release.aab"
-          echo "📥 Téléchargez les fichiers dans l'onglet Actions > Artifacts"
+          echo "BUILD SUCCESS"
+          echo "APK Debug: app/build/outputs/apk/debug/app-debug.apk"
+          echo "AAB Release: app/build/outputs/bundle/release/app-release.aab"
+          echo "Download from Actions tab > Artifacts"
