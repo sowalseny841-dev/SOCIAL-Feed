@@ -175,7 +175,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g"
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Build Release AAB
         working-directory: android-app
@@ -184,7 +184,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: socialfeed
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew bundleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g"
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
