@@ -13,9 +13,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -45,6 +47,23 @@ data class Post(
     val createdAt: com.google.firebase.Timestamp? = null
 )
 
+// ── DiffUtil ──────────────────────────────────────────────────────────────────
+class PostDiffCallback(
+    private val oldList: List<Post>,
+    private val newList: List<Post>
+) : DiffUtil.Callback() {
+    override fun getOldListSize() = oldList.size
+    override fun getNewListSize() = newList.size
+    override fun areItemsTheSame(o: Int, n: Int) = oldList[o].id == newList[n].id
+    override fun areContentsTheSame(o: Int, n: Int): Boolean {
+        val old = oldList[o]; val new = newList[n]
+        return old.content == new.content &&
+                old.likesCount == new.likesCount &&
+                old.commentsCount == new.commentsCount &&
+                old.isLikedByMe == new.isLikedByMe
+    }
+}
+
 // ── ViewModel Feed ────────────────────────────────────────────────────────────
 @HiltViewModel
 class FeedViewModel @Inject constructor(
@@ -66,9 +85,11 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
+                val uid = currentUserId
+                // 1) Charger les posts
                 val snapshot = db.collection("posts")
                     .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .limit(50)
+                    .limit(30)
                     .get().await()
 
                 val postList = snapshot.documents.mapNotNull { doc ->
@@ -88,19 +109,22 @@ class FeedViewModel @Inject constructor(
                     } catch (e: Exception) { null }
                 }
 
-                // Vérifier les likes de l'utilisateur courant
-                val likedPosts = postList.map { post ->
-                    val likeDoc = db.collection("posts")
-                        .document(post.id)
-                        .collection("likes")
-                        .document(currentUserId)
-                        .get().await()
-                    post.copy(isLikedByMe = likeDoc.exists())
-                }
+                // 2) Charger les likes EN UNE SEULE requête (collection "userLikes/{uid}/posts")
+                //    Si uid vide (non connecté), skip
+                val likedPostIds = if (uid.isNotEmpty()) {
+                    try {
+                        db.collection("userLikes").document(uid)
+                            .collection("likedPosts")
+                            .get().await()
+                            .documents.map { it.id }.toSet()
+                    } catch (e: Exception) { emptySet() }
+                } else emptySet<String>()
 
-                _posts.value = likedPosts
+                val finalList = postList.map { it.copy(isLikedByMe = it.id in likedPostIds) }
+                _posts.value = finalList
+
             } catch (e: Exception) {
-                // Garder les posts actuels en cas d'erreur
+                // Ne pas crasher — garder l'état actuel
             } finally {
                 _loading.value = false
             }
@@ -110,7 +134,7 @@ class FeedViewModel @Inject constructor(
     fun createPost(content: String, imageUrl: String = "", onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
-                val user = auth.currentUser ?: return@launch
+                val user = auth.currentUser ?: run { onDone(false); return@launch }
                 val userDoc = db.collection("users").document(user.uid).get().await()
                 db.collection("posts").add(
                     mapOf(
@@ -125,10 +149,9 @@ class FeedViewModel @Inject constructor(
                         "createdAt" to com.google.firebase.Timestamp.now()
                     )
                 ).await()
-                // Incrémenter postsCount
+                // Incrémenter postsCount en arrière-plan (ne pas bloquer)
                 db.collection("users").document(user.uid)
                     .update("postsCount", com.google.firebase.firestore.FieldValue.increment(1))
-                    .await()
                 loadPosts()
                 onDone(true)
             } catch (e: Exception) {
@@ -137,29 +160,42 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    fun toggleLike(postId: String) {
+    fun toggleLike(post: Post) {
         viewModelScope.launch {
+            val uid = currentUserId
+            if (uid.isEmpty()) return@launch
             try {
-                val uid = currentUserId
-                val likeRef = db.collection("posts").document(postId)
-                    .collection("likes").document(uid)
-                val postRef = db.collection("posts").document(postId)
-                val likeDoc = likeRef.get().await()
-
-                if (likeDoc.exists()) {
-                    likeRef.delete().await()
-                    postRef.update("likesCount",
-                        com.google.firebase.firestore.FieldValue.increment(-1)).await()
-                } else {
-                    likeRef.set(mapOf(
-                        "userId" to uid,
-                        "timestamp" to com.google.firebase.Timestamp.now()
-                    )).await()
-                    postRef.update("likesCount",
-                        com.google.firebase.firestore.FieldValue.increment(1)).await()
+                // Mise à jour optimiste locale immédiate (pas de rechargement complet)
+                val currentPosts = _posts.value.toMutableList()
+                val idx = currentPosts.indexOfFirst { it.id == post.id }
+                if (idx >= 0) {
+                    val updated = currentPosts[idx].copy(
+                        isLikedByMe = !post.isLikedByMe,
+                        likesCount = if (post.isLikedByMe) post.likesCount - 1 else post.likesCount + 1
+                    )
+                    currentPosts[idx] = updated
+                    _posts.value = currentPosts
                 }
+
+                val likeRef = db.collection("userLikes").document(uid)
+                    .collection("likedPosts").document(post.id)
+                val postRef = db.collection("posts").document(post.id)
+
+                if (post.isLikedByMe) {
+                    // Retirer le like
+                    likeRef.delete()
+                    postRef.update("likesCount",
+                        com.google.firebase.firestore.FieldValue.increment(-1))
+                } else {
+                    // Ajouter le like
+                    likeRef.set(mapOf("timestamp" to com.google.firebase.Timestamp.now()))
+                    postRef.update("likesCount",
+                        com.google.firebase.firestore.FieldValue.increment(1))
+                }
+            } catch (e: Exception) {
+                // En cas d'erreur, recharger l'état réel
                 loadPosts()
-            } catch (e: Exception) {}
+            }
         }
     }
 
@@ -167,9 +203,12 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 db.collection("posts").document(postId).delete().await()
-                loadPosts()
+                // Retirer localement sans recharger tout
+                _posts.value = _posts.value.filter { it.id != postId }
                 onDone()
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+                onDone()
+            }
         }
     }
 
@@ -202,8 +241,8 @@ class PostAdapter(
         val post = posts[position]
         val b = holder.binding
 
-        b.tvDisplayName.text = post.displayName
-        b.tvUsername.text = "@${post.username}"
+        b.tvDisplayName.text = post.displayName.ifEmpty { "Utilisateur" }
+        b.tvUsername.text = if (post.username.isNotEmpty()) "@${post.username}" else ""
         b.tvContent.text = post.content
         b.tvLikesCount.text = "${post.likesCount} J'aime"
         b.tvCommentsCount.text = "${post.commentsCount} commentaires"
@@ -214,10 +253,15 @@ class PostAdapter(
             ).toString()
         } ?: "À l'instant"
 
-        // Avatar
+        // Avatar avec cache et fallback
         if (post.userAvatarUrl.isNotEmpty()) {
-            Glide.with(b.root).load(post.userAvatarUrl)
-                .circleCrop().into(b.ivAvatar)
+            Glide.with(b.root)
+                .load(post.userAvatarUrl)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .circleCrop()
+                .placeholder(com.socialfeed.app.R.drawable.ic_default_avatar)
+                .error(com.socialfeed.app.R.drawable.ic_default_avatar)
+                .into(b.ivAvatar)
         } else {
             b.ivAvatar.setImageResource(com.socialfeed.app.R.drawable.ic_default_avatar)
         }
@@ -225,13 +269,18 @@ class PostAdapter(
         // Image du post
         if (post.imageUrl.isNotEmpty()) {
             b.ivPostImage.visibility = View.VISIBLE
-            Glide.with(b.root).load(post.imageUrl)
-                .centerCrop().into(b.ivPostImage)
+            Glide.with(b.root)
+                .load(post.imageUrl)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .centerCrop()
+                .placeholder(android.R.color.darker_gray)
+                .error(android.R.color.darker_gray)
+                .into(b.ivPostImage)
         } else {
             b.ivPostImage.visibility = View.GONE
         }
 
-        // Bouton like
+        // Bouton like — mise à jour visuelle immédiate
         b.btnLike.text = if (post.isLikedByMe) "❤️ J'aime" else "🤍 J'aime"
         b.btnLike.setOnClickListener { onLike(post) }
 
@@ -248,8 +297,9 @@ class PostAdapter(
     }
 
     fun updatePosts(newPosts: List<Post>) {
+        val diff = DiffUtil.calculateDiff(PostDiffCallback(posts, newPosts))
         posts = newPosts
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)  // Mise à jour partielle (pas notifyDataSetChanged)
     }
 }
 
@@ -275,7 +325,7 @@ class MainActivity : AppCompatActivity() {
         adapter = PostAdapter(
             posts = emptyList(),
             currentUserId = viewModel.currentUserId,
-            onLike = { post -> viewModel.toggleLike(post.id) },
+            onLike = { post -> viewModel.toggleLike(post) },
             onComment = { post -> showCommentDialog(post) },
             onDelete = { post ->
                 viewModel.deletePost(post.id) {
@@ -283,26 +333,23 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onProfile = { post ->
-                // TODO: ouvrir profil
                 Toast.makeText(this, "@${post.username}", Toast.LENGTH_SHORT).show()
             }
         )
         binding.rvFeed.layoutManager = LinearLayoutManager(this)
         binding.rvFeed.adapter = adapter
+        // Optimisation scrolling
+        binding.rvFeed.setHasFixedSize(false)
+        binding.rvFeed.recycledViewPool.setMaxRecycledViews(0, 10)
 
-        // Pull to refresh
         binding.swipeRefresh.setOnRefreshListener {
             viewModel.loadPosts()
         }
     }
 
     private fun setupCreatePost() {
-        binding.btnCreatePost.setOnClickListener {
-            showCreatePostDialog()
-        }
-        binding.etCreatePostHint.setOnClickListener {
-            showCreatePostDialog()
-        }
+        binding.btnCreatePost.setOnClickListener { showCreatePostDialog() }
+        binding.etCreatePostHint.setOnClickListener { showCreatePostDialog() }
     }
 
     private fun setupBottomNav() {
@@ -315,13 +362,14 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnNavLogout.setOnClickListener {
             viewModel.logout()
-            startActivity(Intent(this, AuthActivity::class.java))
+            startActivity(Intent(this, AuthActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            })
             finish()
         }
     }
 
     private fun observeData() {
-        // Observer les posts
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.posts.collect { posts ->
@@ -333,7 +381,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Observer le loading
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.loading.collect { loading ->
@@ -345,7 +392,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showCreatePostDialog() {
-        val dialog = android.app.AlertDialog.Builder(this)
         val input = android.widget.EditText(this).apply {
             hint = "Quoi de neuf ?"
             setPadding(48, 32, 48, 32)
@@ -353,45 +399,45 @@ class MainActivity : AppCompatActivity() {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                     android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
-        dialog.setTitle("Créer une publication")
-        dialog.setView(input)
-        dialog.setPositiveButton("Publier") { _, _ ->
-            val content = input.text.toString().trim()
-            if (content.isNotEmpty()) {
-                viewModel.createPost(content) { success ->
-                    if (success)
-                        Toast.makeText(this, "✅ Publié !", Toast.LENGTH_SHORT).show()
-                    else
-                        Toast.makeText(this, "❌ Erreur", Toast.LENGTH_SHORT).show()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Créer une publication")
+            .setView(input)
+            .setPositiveButton("Publier") { _, _ ->
+                val content = input.text.toString().trim()
+                if (content.isNotEmpty()) {
+                    viewModel.createPost(content) { success ->
+                        runOnUiThread {
+                            if (success)
+                                Toast.makeText(this, "✅ Publié !", Toast.LENGTH_SHORT).show()
+                            else
+                                Toast.makeText(this, "❌ Erreur de connexion", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
-        }
-        dialog.setNegativeButton("Annuler", null)
-        dialog.show()
+            .setNegativeButton("Annuler", null)
+            .show()
     }
 
     private fun showCommentDialog(post: Post) {
-        val dialog = android.app.AlertDialog.Builder(this)
         val input = android.widget.EditText(this).apply {
             hint = "Écrire un commentaire…"
             setPadding(48, 32, 48, 32)
         }
-        dialog.setTitle("Commenter")
-        dialog.setView(input)
-        dialog.setPositiveButton("Envoyer") { _, _ ->
-            val content = input.text.toString().trim()
-            if (content.isNotEmpty()) {
-                addComment(post.id, content)
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Commenter")
+            .setView(input)
+            .setPositiveButton("Envoyer") { _, _ ->
+                val content = input.text.toString().trim()
+                if (content.isNotEmpty()) addComment(post.id, content)
             }
-        }
-        dialog.setNegativeButton("Annuler", null)
-        dialog.show()
+            .setNegativeButton("Annuler", null)
+            .show()
     }
 
     private fun addComment(postId: String, content: String) {
-        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-        val db = FirebaseFirestore.getInstance()
-        val uid = auth.currentUser?.uid ?: return
+        val uid = viewModel.currentUserId
+        if (uid.isEmpty()) return
 
         lifecycleScope.launch {
             try {
@@ -407,15 +453,25 @@ class MainActivity : AppCompatActivity() {
                             "createdAt" to com.google.firebase.Timestamp.now()
                         )
                     ).await()
+                // Incrémenter en arrière-plan
                 db.collection("posts").document(postId)
                     .update("commentsCount",
-                        com.google.firebase.firestore.FieldValue.increment(1)).await()
-                viewModel.loadPosts()
+                        com.google.firebase.firestore.FieldValue.increment(1))
+                // Mise à jour locale du compteur sans recharger tout
+                val currentPosts = viewModel.posts.value.toMutableList()
+                val idx = currentPosts.indexOfFirst { it.id == postId }
+                if (idx >= 0) {
+                    currentPosts[idx] = currentPosts[idx].copy(
+                        commentsCount = currentPosts[idx].commentsCount + 1
+                    )
+                }
                 Toast.makeText(this@MainActivity, "💬 Commentaire ajouté", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Erreur", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Erreur réseau", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
+    // Référence db locale pour addComment
+    private val db by lazy { FirebaseFirestore.getInstance() }
 }
